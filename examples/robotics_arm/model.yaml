@@ -1,0 +1,74 @@
+# Robotics arm model — YAML constraint model
+# INTENTIONAL ISSUE: joint_speed minimum bound is set to 1.5, but
+# CON-002 requires joint_speed <= 1.2 → Z3 will detect UNSAT.
+
+entities:
+  - name: robot_arm
+    description: 6-DOF articulated manipulator
+  - name: gripper
+    description: Pneumatic end-effector
+  - name: proximity_sensor
+    description: IR-based presence detector
+
+signals:
+  - name: joint_speed
+    kind: sensor
+    unit: rad/s
+    bounds:
+      min: 1.5    # INTENTIONAL CONTRADICTION: min > CON-002 max (1.2)
+      max: 2.5
+  - name: motor_torque
+    kind: actuator
+    unit: Nm
+    bounds:
+      min: 0
+      max: 120
+  - name: gripper_force
+    kind: actuator
+    unit: N
+    bounds:
+      min: 0
+      max: 80
+  - name: human_detected
+    kind: sensor
+    unit: bool
+  - name: e_stop_active
+    kind: sensor
+    unit: bool
+
+states:
+  - name: IDLE
+    description: System initialised, awaiting task
+  - name: OPERATING
+    description: Executing motion plan
+  - name: SAFE_STOP
+    description: Controlled deceleration to standstill
+  - name: FAULT
+    description: Unrecoverable error
+
+modes:
+  - name: NORMAL
+  - name: CALIBRATION
+  - name: MAINTENANCE
+  - name: EMERGENCY
+
+transitions:
+  - from: IDLE
+    to: OPERATING
+    guard: "task_ready == true"
+  - from: OPERATING
+    to: SAFE_STOP
+    guard: "e_stop_active == true"
+  - from: SAFE_STOP
+    to: IDLE
+    guard: "fault_cleared == true"
+
+# No timing parameters defined — TC-001 cannot be verified
+parameters:
+  max_torque_maintenance: 10
+  max_speed_calibration: 1.2
+  # estop_response_ms is intentionally omitted
+
+invariants:
+  - "motor_torque <= 120 at all times"
+  - "joint_speed >= 0 at all times"

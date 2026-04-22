@@ -1,0 +1,82 @@
+# Mobile robot model — YAML constraint model
+# INTENTIONAL ISSUE: angular_velocity max is 1.5 rad/s but REQ-005 says
+# angular_velocity must not exceed 1.0 rad/s at high speed.
+# No explicit constraint captures this, and bounds allow 1.5 > 1.0.
+
+entities:
+  - name: mobile_base
+    description: Differential-drive platform
+  - name: lidar
+    description: 2D laser range finder
+  - name: battery
+    description: Lithium-ion battery pack
+
+signals:
+  - name: linear_velocity
+    kind: actuator
+    unit: m/s
+    bounds:
+      min: 0
+      max: 2.0
+  - name: angular_velocity
+    kind: actuator
+    unit: rad/s
+    bounds:
+      min: -1.5
+      max: 1.5
+  - name: battery_level
+    kind: sensor
+    unit: percent
+    bounds:
+      min: 0
+      max: 100
+  - name: obstacle_distance
+    kind: sensor
+    unit: m
+    bounds:
+      min: 0
+      max: 10
+
+states:
+  - name: MOVING
+  - name: STOPPED
+  - name: DOCKING_APPROACH
+  - name: CHARGING_ACTIVE
+  - name: ERROR
+
+modes:
+  - name: NAVIGATION
+  - name: DOCKING
+  - name: CHARGING
+  - name: STANDBY
+  - name: FAULT
+
+transitions:
+  - from: STOPPED
+    to: MOVING
+    guard: "path_available == true"
+  - from: MOVING
+    to: STOPPED
+    guard: "obstacle_distance <= 0.3"
+  - from: STOPPED
+    to: DOCKING_APPROACH
+    guard: "battery_level <= 20"
+  - from: DOCKING_APPROACH
+    to: CHARGING_ACTIVE
+    guard: "dock_aligned == true"
+  - from: CHARGING_ACTIVE
+    to: STOPPED
+    guard: "battery_level >= 90"
+  # INTENTIONAL ISSUE: MOVING -> DOCKING_APPROACH transition is missing
+  # Robot cannot initiate docking while in motion — potential battery depletion risk
+
+parameters:
+  min_battery_docking_threshold: 20
+  max_speed_near_obstacle: 0.5
+  obstacle_stop_distance: 0.3
+  # obstacle_response_ms: intentionally omitted (TC-001 cannot be verified)
+  # docking_timeout_s: intentionally omitted (TC-002 cannot be verified)
+
+invariants:
+  - "linear_velocity >= 0"
+  - "battery_level >= 0"
