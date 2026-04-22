@@ -265,3 +265,10 @@ Short version:
 - Spec linter / authoring guide enforcer
 - Multi-file spec support
 - Cross-reference validation across spec + code + model
+
+---
+
+## License
+
+This project is licensed under the [Apache License 2.0](LICENSE).
+Copyright 2026 Tetsu Yamaguchi
