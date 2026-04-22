@@ -1,7 +1,7 @@
 """
 Spec extractor — deterministic, regex/section-based extraction from markdown.
 
-Conventions for V0.0.1 (documented in README):
+Current deterministic conventions (documented in README):
   ## Signals       → Signal definitions
   ## States        → State definitions
   ## Modes         → Mode definitions
@@ -24,7 +24,7 @@ from typing import Optional
 
 from eal.ingestion.loaders import SpecDocument
 from eal.ir.schema import (
-    Assumption, AssumptionType, Bounds, Constraint, ConstraintType,
+    Assumption, AssumptionType, Bounds, Constraint, ConstraintScopeType, ConstraintType,
     Entity, IRSnapshot, Mode, Requirement, Signal, SignalKind,
     SourceRef, State, Transition,
 )
@@ -59,6 +59,11 @@ _TRANSITION_RE = re.compile(
 _BOUND_RE = re.compile(r"([<>]=?)\s*([\d.]+)\s*([a-zA-Z/_]+)?")
 # Extract operator + value groups: "must remain <= 1.2 rad/s"
 _OP_VALUE_RE = re.compile(r"(<=|>=|<(?!=)|>(?!=)|==|!=)\s*([\d.]+)")
+_MODE_PATTERNS = (
+    re.compile(r"\bonly\s+in\s+([A-Za-z_][A-Za-z0-9_]*)\s+mode\b", re.IGNORECASE),
+    re.compile(r"\bin\s+([A-Za-z_][A-Za-z0-9_]*)\s+mode\b", re.IGNORECASE),
+    re.compile(r"\bwhen\s+mode\s*(?:=|==)\s*([A-Za-z_][A-Za-z0-9_]*)\b", re.IGNORECASE),
+)
 
 
 def _source(spec: SpecDocument, section: str, line_idx: Optional[int] = None) -> SourceRef:
@@ -76,6 +81,24 @@ def _parse_bounds_from_text(text: str) -> tuple[Optional[str], Optional[float], 
     rest = text[m.end():].strip().split()[0] if text[m.end():].strip() else None
     unit = rest if rest and re.match(r"^[a-zA-Z/_]+$", rest) else None
     return op, val, unit
+
+
+def _extract_mode_scope(text: str, mode_name_map: dict[str, str]) -> list[str]:
+    """Extract deterministic mode qualifiers from constraint/requirement text."""
+    modes: list[str] = []
+    for pattern in _MODE_PATTERNS:
+        for match in pattern.finditer(text):
+            raw = match.group(1)
+            canonical = mode_name_map.get(raw.lower(), raw.upper())
+            if canonical not in modes:
+                modes.append(canonical)
+    return modes
+
+
+def _scope_fields(applies_in_modes: list[str]) -> tuple[ConstraintScopeType, bool]:
+    if applies_in_modes:
+        return (ConstraintScopeType.MODE, False)
+    return (ConstraintScopeType.GLOBAL, True)
 
 
 def _parse_signals(lines: list[str], spec: SpecDocument, section: str) -> list[Signal]:
@@ -227,7 +250,7 @@ def _parse_constraints(
     section: str,
     pattern: re.Pattern,
     ctype: ConstraintType,
-    prefix: str,
+    mode_name_map: dict[str, str],
 ) -> list[Constraint]:
     constraints = []
     for i, line in enumerate(lines):
@@ -242,18 +265,90 @@ def _parse_constraints(
         tokens = re.findall(r"\b([A-Z][A-Z_0-9]+|[a-z][a-z_0-9]+)\b", text)
         # Heuristic: uppercase tokens tend to be states/modes, lowercase are signals
         related_signals = [t for t in tokens if t and t[0].islower() and len(t) > 2]
-        related_states_modes = [t for t in tokens if t and t[0].isupper() and len(t) > 2]
+        upper_tokens = [t for t in tokens if t and t[0].isupper() and len(t) > 2]
+        mode_scope = _extract_mode_scope(text, mode_name_map)
+        token_modes = [t for t in upper_tokens if t.lower() in mode_name_map]
+        related_modes = list(dict.fromkeys(mode_scope + token_modes))
+        related_states = [t for t in upper_tokens if t not in related_modes]
+        scope_type, applies_globally = _scope_fields(related_modes)
 
         constraints.append(Constraint(
             id=cid,
             expression_text=text,
             constraint_type=ctype,
+            scope_type=scope_type,
+            applies_globally=applies_globally,
+            applies_in_modes=related_modes,
             related_signals=list(dict.fromkeys(related_signals)),
-            related_states=related_states_modes,
+            related_states=related_states,
+            related_modes=related_modes,
             numeric_value=val,
             operator=op,
             source_ref=_source(spec, section, i),
         ))
+    return constraints
+
+
+def _derive_constraints_from_requirements(
+    reqs: list[Requirement],
+    signals: list[Signal],
+    mode_name_map: dict[str, str],
+) -> list[Constraint]:
+    """
+    Derive numeric constraints from requirement text when deterministic structure is present.
+
+    Supported pattern:
+      - requirement contains numeric comparison (<=, >=, <, >, ==)
+      - requirement mentions a known signal token
+      - optional mode qualifiers (in X mode / when mode = X / only in X mode)
+    """
+    constraints: list[Constraint] = []
+    signal_names = [s.name for s in signals]
+    signal_name_map = {s.name.lower(): s.name for s in signals}
+
+    for req in reqs:
+        op, val, _ = _parse_bounds_from_text(req.text)
+        if op is None or val is None:
+            continue
+
+        text_lower = req.text.lower()
+        related_signals: list[str] = []
+        for sname in signal_names:
+            signal_snake = sname.lower()
+            signal_words = signal_snake.replace("_", " ")
+            if re.search(rf"\b{re.escape(signal_snake)}\b", text_lower) or re.search(
+                rf"\b{re.escape(signal_words)}\b", text_lower
+            ):
+                related_signals.append(sname)
+
+        if not related_signals:
+            # fallback: detect simple snake_case signal-like references
+            for token in re.findall(r"\b([a-z][a-z_0-9]+)\b", text_lower):
+                if token in signal_name_map and signal_name_map[token] not in related_signals:
+                    related_signals.append(signal_name_map[token])
+
+        if not related_signals:
+            continue
+
+        related_modes = _extract_mode_scope(req.text, mode_name_map)
+        scope_type, applies_globally = _scope_fields(related_modes)
+
+        for idx, signal_name in enumerate(sorted(related_signals), start=1):
+            constraints.append(Constraint(
+                id=f"REQC-{req.id}-{idx:02d}",
+                expression_text=req.text,
+                normalized_form=f"{signal_name} {op} {val}",
+                constraint_type=ConstraintType.BOUND,
+                scope_type=scope_type,
+                applies_globally=applies_globally,
+                applies_in_modes=related_modes,
+                related_signals=[signal_name],
+                related_modes=related_modes,
+                numeric_value=val,
+                operator=op,
+                source_ref=req.source_ref,
+            ))
+
     return constraints
 
 
@@ -268,7 +363,6 @@ def _link_requirements_to_ir(
     signal_names = {s.name.lower(): s.name for s in signals}
     state_names = {s.name.lower(): s.name for s in states}
     mode_names = {m.name.lower(): m.name for m in modes}
-    constraint_ids = {c.id for c in constraints}
 
     for req in reqs:
         tokens = re.findall(r"\b\w+\b", req.text)
@@ -277,12 +371,18 @@ def _link_requirements_to_ir(
             if tl in signal_names:
                 if signal_names[tl] not in req.parsed_signals:
                     req.parsed_signals.append(signal_names[tl])
-            if tok in state_names.values() or tok in {v for v in state_names.values()}:
-                if tok not in req.parsed_states:
-                    req.parsed_states.append(tok)
-            if tok in mode_names.values():
-                if tok not in req.parsed_modes:
-                    req.parsed_modes.append(tok)
+            if tl in state_names:
+                state_name = state_names[tl]
+                if state_name not in req.parsed_states:
+                    req.parsed_states.append(state_name)
+            if tl in mode_names:
+                mode_name = mode_names[tl]
+                if mode_name not in req.parsed_modes:
+                    req.parsed_modes.append(mode_name)
+
+        for mode in _extract_mode_scope(req.text, mode_names):
+            if mode not in req.parsed_modes:
+                req.parsed_modes.append(mode)
         # Link constraints by shared signal
         for con in constraints:
             if any(s in req.parsed_signals for s in con.related_signals):
@@ -314,21 +414,27 @@ def extract_ir_from_spec(spec: SpecDocument) -> IRSnapshot:
     transitions = _parse_transitions(get("Transitions"), spec, "Transitions")
     requirements = _parse_requirements(get("Requirements"), spec, "Requirements")
     assumptions  = _parse_assumptions(get("Assumptions"), spec, "Assumptions")
+    mode_name_map = {m.name.lower(): m.name for m in modes}
 
     safety_constraints = _parse_constraints(
         get("Safety Constraints"), spec, "Safety Constraints", _CON_RE,
-        ConstraintType.INVARIANT, "CON",
+        ConstraintType.INVARIANT, mode_name_map,
     )
     forbidden_conditions = _parse_constraints(
         get("Forbidden Conditions"), spec, "Forbidden Conditions", _FC_RE,
-        ConstraintType.FORBIDDEN, "FC",
+        ConstraintType.FORBIDDEN, mode_name_map,
     )
     timing_constraints = _parse_constraints(
         get("Timing Constraints"), spec, "Timing Constraints", _TC_RE,
-        ConstraintType.TIMING, "TC",
+        ConstraintType.TIMING, mode_name_map,
+    )
+    requirement_constraints = _derive_constraints_from_requirements(
+        requirements,
+        signals,
+        mode_name_map,
     )
 
-    all_constraints = safety_constraints + forbidden_conditions + timing_constraints
+    all_constraints = safety_constraints + forbidden_conditions + timing_constraints + requirement_constraints
 
     if not signals:
         warnings.append("No signals found. Add a '## Signals' section to your spec.")

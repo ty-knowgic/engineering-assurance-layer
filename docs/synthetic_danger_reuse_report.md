@@ -47,12 +47,12 @@ All constraint checking in Synthetic Danger is keyword/regex-based or LLM-based.
 
 | Synthetic Danger Asset | Reason |
 |------------------------|--------|
-| `finding_generator.py` | Entirely LLM-based (OpenAI GPT). EAL V0.0.1 is deterministic — no external API calls |
+| `finding_generator.py` | Entirely LLM-based (OpenAI GPT). EAL is deterministic in v0.0.2 — no external API calls |
 | `eco_parser.py` ECO field mapping | ECO-specific: `eco_header`, `change_class`, `affected_items`, `specifications_changed`. No equivalent in engineering spec context |
 | `hazard_ontology.json` | 8 hazard categories (Mechanical/Electrical/Software/Control/etc.) are robotics-safety-specific, not reusable as generic assurance categories |
 | `impact_taxonomy.json` | 8 impact disciplines (Manufacturing, Quality, SupplyChain, Regulatory, etc.) are manufacturing ECO disciplines |
 | `anchor_extractor.py` | Extracts part numbers, drawing revisions, process plan IDs — all ECO manufacturing identifiers |
-| `enrich.py`, `reason_high.py`, `repair_truncation.py` | Pure LLM enrichment pipeline — out of scope for V0.0.1 |
+| `enrich.py`, `reason_high.py`, `repair_truncation.py` | Pure LLM enrichment pipeline — out of scope for the current deterministic EAL baseline |
 | `normalize.py` | Robotics component alias normalization (fuzzy matching on vacuum gripper, RGB camera, etc.) |
 | `run.py` | Hazard generation pipeline — domain-specific, LLM-heavy |
 | `scorer.py` (ECRB) | Discipline-recall scoring against expected ECO review disciplines |
@@ -76,7 +76,7 @@ All constraint checking in Synthetic Danger is keyword/regex-based or LLM-based.
 | Phase 0 scoring (specificity, discipline recall) | Finding severity + CRITICAL/HIGH count |
 | `_git_info()` / `run_id` | Same function, same fields |
 | Safety hazard review | Engineering assurance review |
-| LLM finding generation | (not in V0.0.1; deterministic rules only) |
+| LLM finding generation | (not in v0.0.2; deterministic rules only) |
 | Hazard taxonomy | Z3-backed constraint checking |
 
 ---
