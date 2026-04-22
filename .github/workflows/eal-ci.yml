@@ -4,6 +4,10 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+  security-events: write
+
 jobs:
   test-and-review:
     runs-on: ubuntu-latest
@@ -34,6 +38,16 @@ jobs:
             --model examples/ci_smoke/model.yaml \
             --fail-on-severity "${EAL_FAIL_ON_SEVERITY}" \
             --out out/ci_smoke_review
+
+      - name: Publish EAL SARIF to GitHub code scanning
+        if: >
+          always() &&
+          hashFiles('out/ci_smoke_review/results.sarif') != '' &&
+          (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false)
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: out/ci_smoke_review/results.sarif
+          category: eal-ci-smoke
 
       - name: Upload EAL review artifacts
         if: always()

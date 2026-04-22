@@ -365,14 +365,22 @@ It runs on `push` and `pull_request` and executes:
 2. `pytest`
 3. `python -m eal.cli review` against `examples/ci_smoke` with
    `--fail-on-severity HIGH`
+4. publishes `out/ci_smoke_review/results.sarif` to GitHub code scanning
 
 The workflow uploads `out/ci_smoke_review` as a build artifact, which includes
 `findings.json`, `review_summary.md`, `run_metadata.json`, `results.sarif`,
 `report.html`, and the other emitted review artifacts.
 
+The same canonical `results.sarif` file is used for both artifact preservation
+and GitHub code scanning upload (no parallel SARIF generation in CI).
+
 `examples/robotics_arm` and `examples/mobile_robot` intentionally contain issues
 for demonstration/testing, so CI uses the dedicated passing smoke fixture to
 avoid permanent workflow failure from intentionally failing examples.
+
+GitHub code scanning visibility depends on repository settings and token
+permissions. Upload is skipped for fork-based pull requests where
+`security-events: write` is not available.
 
 ---
 
