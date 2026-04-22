@@ -3,7 +3,12 @@ from eal.ir.schema import (
     AssumptionType,
     Bounds,
     Constraint,
+    ConstraintScopeType,
     ConstraintType,
+    CodeComparison,
+    CodeConstant,
+    CodeEvidence,
+    CodeSymbolClass,
     Entity,
     IRSnapshot,
     Mode,
@@ -17,6 +22,8 @@ from eal.ir.schema import (
 
 __all__ = [
     "Assumption", "AssumptionType", "Bounds", "Constraint", "ConstraintType",
-    "Entity", "IRSnapshot", "Mode", "Requirement", "Signal", "SignalKind",
-    "SourceRef", "State", "Transition",
+    "ConstraintScopeType",
+    "CodeComparison", "CodeConstant", "CodeEvidence", "CodeSymbolClass", "Entity", "IRSnapshot",
+    "Mode", "Requirement", "Signal", "SignalKind", "SourceRef", "State",
+    "Transition",
 ]

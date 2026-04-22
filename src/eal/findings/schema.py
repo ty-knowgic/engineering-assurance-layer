@@ -19,7 +19,13 @@ Categories:
   FORBIDDEN_UNCHECKED  → forbidden condition with no guard or detection mechanism
   UNREACHABLE_STATE    → state/mode reachable but blocked by constraints
   TRANSITION_GAP       → transition references undefined state
-  CONSTRAINT_CONFLICT  → Z3-verified contradiction between constraints
+  CODE_BOUND_MISMATCH  → code constant/threshold is looser than spec/model bound
+  CODE_TIMING_MISMATCH → code timing parameter exceeds required response limit
+  CODE_UNMODELED_PARAMETER → code parameter appears engineering-relevant but unmodeled
+  CONSTRAINT_CONFLICT  → legacy generic constraint contradiction category
+  GLOBAL_CONSTRAINT_CONFLICT → contradiction present independent of active mode
+  MODE_SCOPED_CONFLICT → contradiction appears when a specific mode is active
+  UNSAT_IN_MODE        → signal-level unsatisfiable bound/constraint set in one mode
   SOLVER_COUNTEREXAMPLE → Z3 found a concrete counterexample
 """
 
@@ -47,7 +53,13 @@ class FindingCategory(str, Enum):
     FORBIDDEN_UNCHECKED = "FORBIDDEN_UNCHECKED"
     UNREACHABLE_STATE = "UNREACHABLE_STATE"
     TRANSITION_GAP = "TRANSITION_GAP"
+    CODE_BOUND_MISMATCH = "CODE_BOUND_MISMATCH"
+    CODE_TIMING_MISMATCH = "CODE_TIMING_MISMATCH"
+    CODE_UNMODELED_PARAMETER = "CODE_UNMODELED_PARAMETER"
     CONSTRAINT_CONFLICT = "CONSTRAINT_CONFLICT"
+    GLOBAL_CONSTRAINT_CONFLICT = "GLOBAL_CONSTRAINT_CONFLICT"
+    MODE_SCOPED_CONFLICT = "MODE_SCOPED_CONFLICT"
+    UNSAT_IN_MODE = "UNSAT_IN_MODE"
     SOLVER_COUNTEREXAMPLE = "SOLVER_COUNTEREXAMPLE"
 
 
@@ -80,3 +92,36 @@ def assign_ids(findings: list[Finding]) -> list[Finding]:
     for i, f in enumerate(ordered, start=1):
         f.id = f"F-{i:03d}"
     return ordered
+
+
+_SEVERITY_RANK: dict[str, int] = {
+    "NONE": 0,
+    "LOW": 1,
+    "MEDIUM": 2,
+    "HIGH": 3,
+    "CRITICAL": 4,
+}
+
+
+def severity_rank(severity: str | FindingSeverity) -> int:
+    """Return deterministic severity rank for threshold comparisons."""
+    value = severity.value if isinstance(severity, FindingSeverity) else str(severity)
+    return _SEVERITY_RANK.get(value.upper(), 0)
+
+
+def highest_severity(findings: list[Finding]) -> str:
+    """Return highest finding severity, or NONE when no findings exist."""
+    if not findings:
+        return "NONE"
+    return max((f.severity.value for f in findings), key=severity_rank)
+
+
+def meets_or_exceeds_threshold(
+    severity: str | FindingSeverity,
+    threshold: str | FindingSeverity,
+) -> bool:
+    """True when severity is >= threshold in deterministic rank order."""
+    threshold_rank = severity_rank(threshold)
+    if threshold_rank <= 0:
+        return False
+    return severity_rank(severity) >= threshold_rank

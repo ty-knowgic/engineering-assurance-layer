@@ -6,7 +6,15 @@ import pytest
 
 from eal.findings.schema import FindingCategory, FindingSeverity
 from eal.ir.schema import (
-    Bounds, Constraint, ConstraintType, IRSnapshot, Signal, SignalKind, Transition,
+    Bounds,
+    Constraint,
+    ConstraintScopeType,
+    ConstraintType,
+    IRSnapshot,
+    Mode,
+    Signal,
+    SignalKind,
+    Transition,
 )
 from eal.solver.z3_checker import run_z3_checks
 
@@ -46,7 +54,9 @@ def test_z3_detects_unsat_bounds():
     findings = run_z3_checks(ir)
     assert len(findings) >= 1
     assert any(f.severity == FindingSeverity.CRITICAL for f in findings)
-    assert any(f.category == FindingCategory.CONSTRAINT_CONFLICT for f in findings)
+    assert any(
+        f.category == FindingCategory.GLOBAL_CONSTRAINT_CONFLICT for f in findings
+    )
     # Counterexample should be present
     ce_findings = [f for f in findings if f.counterexample is not None]
     assert len(ce_findings) >= 1
@@ -100,6 +110,105 @@ def test_z3_max_bound_violation():
     )
     findings = run_z3_checks(ir)
     assert any(f.severity == FindingSeverity.CRITICAL for f in findings)
+    assert any(
+        f.category == FindingCategory.GLOBAL_CONSTRAINT_CONFLICT for f in findings
+    )
+
+
+def test_z3_mode_scoped_unsat_not_global():
+    """
+    joint_speed bound min=1.5 conflicts with <=1.2 only in CALIBRATION mode.
+    Global system remains satisfiable but CALIBRATION is UNSAT.
+    """
+    ir = _ir(
+        modes=[Mode(name="CALIBRATION"), Mode(name="NORMAL")],
+        signals=[
+            Signal(
+                name="joint_speed",
+                kind=SignalKind.SENSOR,
+                bounds=Bounds(min=1.5, max=2.5),
+            )
+        ],
+        constraints=[
+            Constraint(
+                id="CON-001",
+                expression_text="joint_speed <= 1.2 when mode = CALIBRATION",
+                constraint_type=ConstraintType.INVARIANT,
+                scope_type=ConstraintScopeType.MODE,
+                applies_globally=False,
+                applies_in_modes=["CALIBRATION"],
+                related_signals=["joint_speed"],
+                related_modes=["CALIBRATION"],
+                numeric_value=1.2,
+                operator="<=",
+            )
+        ],
+    )
+    findings = run_z3_checks(ir)
+    categories = {f.category for f in findings}
+    assert FindingCategory.UNSAT_IN_MODE in categories
+    assert FindingCategory.GLOBAL_CONSTRAINT_CONFLICT not in categories
+
+
+def test_z3_mode_scoped_satisfiable_in_other_mode():
+    ir = _ir(
+        modes=[Mode(name="CALIBRATION"), Mode(name="NORMAL")],
+        signals=[Signal(name="joint_speed", kind=SignalKind.SENSOR, bounds=Bounds(min=0, max=2.5))],
+        constraints=[
+            Constraint(
+                id="CON-001",
+                expression_text="joint_speed <= 1.2 when mode = CALIBRATION",
+                constraint_type=ConstraintType.INVARIANT,
+                scope_type=ConstraintScopeType.MODE,
+                applies_globally=False,
+                applies_in_modes=["CALIBRATION"],
+                related_signals=["joint_speed"],
+                related_modes=["CALIBRATION"],
+                numeric_value=1.2,
+                operator="<=",
+            )
+        ],
+    )
+    findings = run_z3_checks(ir)
+    # No contradiction expected.
+    assert not any(f.severity == FindingSeverity.CRITICAL for f in findings)
+
+
+def test_z3_mode_scoped_joint_conflict_category():
+    ir = _ir(
+        modes=[Mode(name="CALIBRATION"), Mode(name="NORMAL")],
+        signals=[Signal(name="joint_speed", kind=SignalKind.SENSOR, bounds=Bounds(min=0, max=3.0))],
+        constraints=[
+            Constraint(
+                id="CON-001",
+                expression_text="joint_speed <= 1.0 when mode = CALIBRATION",
+                constraint_type=ConstraintType.INVARIANT,
+                scope_type=ConstraintScopeType.MODE,
+                applies_globally=False,
+                applies_in_modes=["CALIBRATION"],
+                related_signals=["joint_speed"],
+                related_modes=["CALIBRATION"],
+                numeric_value=1.0,
+                operator="<=",
+            ),
+            Constraint(
+                id="CON-002",
+                expression_text="joint_speed >= 2.0 when mode = CALIBRATION",
+                constraint_type=ConstraintType.INVARIANT,
+                scope_type=ConstraintScopeType.MODE,
+                applies_globally=False,
+                applies_in_modes=["CALIBRATION"],
+                related_signals=["joint_speed"],
+                related_modes=["CALIBRATION"],
+                numeric_value=2.0,
+                operator=">=",
+            ),
+        ],
+    )
+    findings = run_z3_checks(ir)
+    categories = {f.category for f in findings}
+    assert FindingCategory.MODE_SCOPED_CONFLICT in categories
+    assert FindingCategory.GLOBAL_CONSTRAINT_CONFLICT not in categories
 
 
 # ── Impossible mode combinations ─────────────────────────────────────────────
@@ -133,7 +242,10 @@ def test_z3_no_forbidden_pair_no_finding():
 # ── Full example ──────────────────────────────────────────────────────────────
 
 def test_z3_robotics_arm_detects_contradiction(robotics_arm_spec, robotics_arm_model):
-    """The robotics arm example has a deliberate UNSAT: joint_speed min=1.5 > constraint max=1.2."""
+    """
+    Robotics arm has mode-scoped UNSAT in CALIBRATION:
+    joint_speed min=1.5 > calibration limit 1.2.
+    """
     from eal.ingestion import load_spec, load_model
     from eal.extraction import extract_ir_from_spec, merge_model_into_ir
     spec = load_spec(robotics_arm_spec)
@@ -143,6 +255,8 @@ def test_z3_robotics_arm_detects_contradiction(robotics_arm_spec, robotics_arm_m
     findings = run_z3_checks(ir)
     critical = [f for f in findings if f.severity == FindingSeverity.CRITICAL]
     assert len(critical) >= 1
+    categories = {f.category for f in critical}
+    assert FindingCategory.UNSAT_IN_MODE in categories or FindingCategory.MODE_SCOPED_CONFLICT in categories
 
 
 def test_z3_empty_ir_no_crash():

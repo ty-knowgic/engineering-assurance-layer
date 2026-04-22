@@ -1,0 +1,43 @@
+# Mode scope demo model:
+# globally satisfiable, but intentionally unsatisfiable in CALIBRATION mode.
+
+entities:
+  - name: pressure_loop
+    description: Mode-scoped pressure controller
+
+signals:
+  - name: pressure
+    kind: actuator
+    unit: bar
+    bounds:
+      min: 0
+      max: 10
+  - name: command_ready
+    kind: internal
+    unit: bool
+    bounds:
+      min: 0
+      max: 1
+
+states:
+  - name: IDLE
+  - name: ACTIVE
+
+modes:
+  - name: NORMAL
+  - name: CALIBRATION
+
+transitions:
+  - from: IDLE
+    to: ACTIVE
+    guard: "command_ready == true"
+  - from: ACTIVE
+    to: IDLE
+    guard: "command_ready == false"
+
+mode_constraints:
+  - id: MCON-001
+    mode: CALIBRATION
+    signal: pressure
+    operator: ">="
+    value: 8.0

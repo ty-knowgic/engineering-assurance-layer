@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from eal.ir.schema import (
     Bounds, Constraint, ConstraintType, IRSnapshot,
-    Mode, Requirement, Signal, SignalKind, State, Transition,
+    CodeConstant, CodeComparison, CodeEvidence, Mode, Requirement, Signal, SignalKind, State, Transition,
 )
 
 
@@ -76,6 +76,37 @@ def test_constraint_by_id():
 
 def test_ir_json_serializable():
     ir = _make_ir()
+    ir.code_constants.append(
+        CodeConstant(
+            evidence_id="CC-001",
+            file="controller.py",
+            line=10,
+            symbol="MAX_SPEED",
+            normalized_name="speed",
+            value=5.0,
+        )
+    )
+    ir.code_comparisons.append(
+        CodeComparison(
+            evidence_id="CMP-001",
+            file="controller.py",
+            line=11,
+            symbol="speed",
+            normalized_name="speed",
+            operator="<=",
+            value=5.0,
+        )
+    )
+    ir.code_evidence.append(
+        CodeEvidence(
+            evidence_id="CC-001",
+            kind="constant",
+            file="controller.py",
+            line=10,
+            symbol="MAX_SPEED",
+            value=5.0,
+        )
+    )
     import json
     data = ir.extra_model_fields()
     text = json.dumps(data)  # must not raise

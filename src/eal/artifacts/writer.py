@@ -12,6 +12,7 @@ Outputs:
   review_evidence.json     — evidence model (reused from Synthetic Danger pattern)
   ir_snapshot.json         — full IR dump
   findings.json            — all findings (stable schema)
+  results.sarif            — SARIF v2.1.0 output derived from findings
   report.html              — simple HTML report
   run_metadata.json        — run provenance
 """
@@ -24,8 +25,14 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
-from eal.findings.schema import Finding, FindingCategory, FindingSeverity
+from eal.findings.schema import (
+    Finding,
+    FindingCategory,
+    FindingSeverity,
+    meets_or_exceeds_threshold,
+)
 from eal.ir.schema import IRSnapshot
+from eal.artifacts.sarif import write_sarif_artifact
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -72,6 +79,13 @@ def _write_review_summary(
     findings: list[Finding],
     run_id: str,
     spec_file: str,
+    fail_on_severity: str,
+    min_severity: str,
+    strictness: str,
+    suppressed_finding_count: int,
+    highest_severity_found: str,
+    gate_failed: bool,
+    sarif_file: str,
 ) -> None:
     by_sev = _findings_by_severity(findings)
     critical = len(by_sev["CRITICAL"])
@@ -79,7 +93,11 @@ def _write_review_summary(
     medium = len(by_sev["MEDIUM"])
     low = len(by_sev["LOW"])
 
-    overall = "PASS" if critical == 0 and high == 0 else "REVIEW REQUIRED"
+    review_status = "PASS" if critical == 0 and high == 0 else "REVIEW REQUIRED"
+    gate_status = "FAIL" if gate_failed else "PASS"
+    displayed_findings = [
+        f for f in findings if meets_or_exceeds_threshold(f.severity.value, min_severity)
+    ]
 
     lines = [
         "# Engineering Assurance Review Summary",
@@ -87,7 +105,14 @@ def _write_review_summary(
         f"**Run ID:** `{run_id}`",
         f"**Spec:** `{spec_file}`",
         f"**Generated:** {_now_iso()}",
-        f"**Overall status:** {'✅ ' if overall == 'PASS' else '❌ '}{overall}",
+        f"**Review status:** {'✅ ' if review_status == 'PASS' else '❌ '}{review_status}",
+        f"**Highest severity found:** `{highest_severity_found}`",
+        f"**Gate threshold:** `{fail_on_severity}`",
+        f"**Gate result:** {'✅ PASS' if gate_status == 'PASS' else '❌ FAIL'}",
+        f"**Presentation minimum severity:** `{min_severity}`",
+        f"**Rule strictness:** `{strictness}`",
+        f"**Strictness-suppressed findings:** `{suppressed_finding_count}`",
+        f"**SARIF artifact:** `{sarif_file}`",
         "",
         "## Findings Overview",
         "",
@@ -108,6 +133,9 @@ def _write_review_summary(
         f"- Requirements: {len(ir.requirements)}",
         f"- Constraints: {len(ir.constraints)}",
         f"- Assumptions: {len(ir.assumptions)}",
+        f"- Code files analyzed: {len(ir.code_files)}",
+        f"- Code constants extracted: {len(ir.code_constants)}",
+        f"- Code comparisons extracted: {len(ir.code_comparisons)}",
     ]
 
     if ir.extraction_warnings:
@@ -115,12 +143,21 @@ def _write_review_summary(
         for w in ir.extraction_warnings:
             lines.append(f"- ⚠️  {w}")
 
-    if findings:
+    if displayed_findings:
         lines += ["", "## Top Findings", ""]
-        for f in findings[:10]:
+        lines.append(
+            f"_Showing findings at or above `{min_severity}` "
+            f"({len(displayed_findings)} of {len(findings)} total)._"
+        )
+        lines.append("")
+        for f in displayed_findings[:10]:
             lines.append(f"- {_severity_icon(f.severity)} **{f.id}** [{f.category.value}] {f.title}")
     else:
-        lines += ["", "_No findings generated._"]
+        lines += [
+            "",
+            f"_No findings at or above `{min_severity}` "
+            f"({len(findings)} total findings exist)._",
+        ]
 
     (out / "review_summary.md").write_text("\n".join(lines), encoding="utf-8")
 
@@ -208,7 +245,13 @@ def _write_counterexamples(out: Path, findings: list[Finding]) -> None:
     )
 
 
-def _write_review_evidence(out: Path, ir: IRSnapshot, run_id: str, spec_file: str) -> None:
+def _write_review_evidence(
+    out: Path,
+    ir: IRSnapshot,
+    run_id: str,
+    spec_file: str,
+    sarif_file: str,
+) -> None:
     payload = {
         "run_id": run_id,
         "generated_at": _now_iso(),
@@ -225,7 +268,22 @@ def _write_review_evidence(out: Path, ir: IRSnapshot, run_id: str, spec_file: st
             "requirements": len(ir.requirements),
             "constraints": len(ir.constraints),
             "assumptions": len(ir.assumptions),
+            "code_constants": len(ir.code_constants),
+            "code_comparisons": len(ir.code_comparisons),
+            "code_evidence": len(ir.code_evidence),
             "extraction_warnings": len(ir.extraction_warnings),
+        },
+        "code_analysis": {
+            "analyzed_files": ir.code_files,
+            "constants_extracted": len(ir.code_constants),
+            "comparisons_extracted": len(ir.code_comparisons),
+            "evidence_items": len(ir.code_evidence),
+        },
+        "artifacts": {
+            "sarif": {
+                "generated": True,
+                "file": sarif_file,
+            }
         },
         "git": _git_info(),
     }
@@ -332,8 +390,19 @@ def _write_run_metadata(
     model_file: Optional[str],
     code_files: list[str],
     finding_count: int,
+    highest_severity_found: str,
+    low_count: int,
+    medium_count: int,
     critical_count: int,
     high_count: int,
+    fail_on_severity: str,
+    min_severity: str,
+    strictness: str,
+    suppressed_finding_count: int,
+    suppressed_by_rule: dict[str, int],
+    gate_failed: bool,
+    exit_reason: str,
+    sarif_file: str,
 ) -> None:
     from eal import __version__
     payload = {
@@ -347,9 +416,31 @@ def _write_run_metadata(
         },
         "results": {
             "finding_count": finding_count,
+            "highest_severity_found": highest_severity_found,
+            "low_count": low_count,
+            "medium_count": medium_count,
             "critical_count": critical_count,
             "high_count": high_count,
             "status": "REVIEW_REQUIRED" if (critical_count or high_count) else "PASS",
+        },
+        "gate": {
+            "fail_on_severity": fail_on_severity,
+            "min_severity": min_severity,
+            "failed": gate_failed,
+            "result": "FAIL" if gate_failed else "PASS",
+            "exit_reason": exit_reason,
+        },
+        "strictness": {
+            "level": strictness,
+            "suppressed_finding_count": suppressed_finding_count,
+            "suppressed_by_rule": suppressed_by_rule,
+            "notes": "Strictness filtering applies to heuristic rules only; solver and always-on deterministic rules are unaffected.",
+        },
+        "artifacts": {
+            "sarif": {
+                "generated": True,
+                "file": sarif_file,
+            }
         },
         "git": _git_info(),
     }
@@ -365,18 +456,40 @@ def write_artifacts(
     ir: IRSnapshot,
     findings: list[Finding],
     run_id: str,
+    fail_on_severity: str = "NONE",
+    min_severity: str = "LOW",
+    strictness: str = "balanced",
+    suppressed_finding_count: int = 0,
+    suppressed_by_rule: Optional[dict[str, int]] = None,
+    highest_severity_found: str = "NONE",
+    gate_failed: bool = False,
+    exit_reason: str = "REVIEW_COMPLETED",
 ) -> None:
     """Write all review artifacts to out_dir. Directory must already exist."""
     out_dir.mkdir(parents=True, exist_ok=True)
 
     by_sev = _findings_by_severity(findings)
     spec_file = ir.spec_file
+    sarif_file = write_sarif_artifact(out_dir, findings, run_id)
 
-    _write_review_summary(out_dir, ir, findings, run_id, spec_file)
+    _write_review_summary(
+        out_dir,
+        ir,
+        findings,
+        run_id,
+        spec_file,
+        fail_on_severity=fail_on_severity,
+        min_severity=min_severity,
+        strictness=strictness,
+        suppressed_finding_count=suppressed_finding_count,
+        highest_severity_found=highest_severity_found,
+        gate_failed=gate_failed,
+        sarif_file=sarif_file,
+    )
     _write_constraint_violations(out_dir, findings)
     _write_missing_assumptions(out_dir, findings)
     _write_counterexamples(out_dir, findings)
-    _write_review_evidence(out_dir, ir, run_id, spec_file)
+    _write_review_evidence(out_dir, ir, run_id, spec_file, sarif_file=sarif_file)
     _write_ir_snapshot(out_dir, ir)
     _write_findings(out_dir, findings)
     _write_html_report(out_dir, ir, findings, run_id)
@@ -387,6 +500,17 @@ def write_artifacts(
         model_file=ir.model_file,
         code_files=ir.code_files,
         finding_count=len(findings),
+        highest_severity_found=highest_severity_found,
+        low_count=len(by_sev["LOW"]),
+        medium_count=len(by_sev["MEDIUM"]),
         critical_count=len(by_sev["CRITICAL"]),
         high_count=len(by_sev["HIGH"]),
+        fail_on_severity=fail_on_severity,
+        min_severity=min_severity,
+        strictness=strictness,
+        suppressed_finding_count=suppressed_finding_count,
+        suppressed_by_rule=suppressed_by_rule or {},
+        gate_failed=gate_failed,
+        exit_reason=exit_reason,
+        sarif_file=sarif_file,
     )

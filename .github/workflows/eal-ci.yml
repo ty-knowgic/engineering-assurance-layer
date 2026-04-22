@@ -1,0 +1,44 @@
+name: eal-ci
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test-and-review:
+    runs-on: ubuntu-latest
+    env:
+      EAL_FAIL_ON_SEVERITY: HIGH
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install package and dev dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Run tests
+        run: pytest
+
+      - name: Run EAL CI smoke review (gate on HIGH+)
+        run: |
+          python -m eal.cli review \
+            --spec examples/ci_smoke/spec.md \
+            --model examples/ci_smoke/model.yaml \
+            --fail-on-severity "${EAL_FAIL_ON_SEVERITY}" \
+            --out out/ci_smoke_review
+
+      - name: Upload EAL review artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eal-ci-review-artifacts
+          path: out/ci_smoke_review
+          if-no-files-found: warn

@@ -1,0 +1,37 @@
+# Code mismatch demo model:
+# spec/model are aligned; mismatches are introduced in controller.py.
+
+entities:
+  - name: robot_arm
+    description: Controller under review
+
+signals:
+  - name: joint_speed
+    kind: actuator
+    unit: rad/s
+    bounds:
+      min: 0
+      max: 1.2
+  - name: e_stop_active
+    kind: sensor
+    unit: bool
+    bounds:
+      min: 0
+      max: 1
+
+states:
+  - name: OPERATING
+  - name: SAFE_STOP
+
+modes:
+  - name: NORMAL
+  - name: EMERGENCY
+
+transitions:
+  - from: OPERATING
+    to: SAFE_STOP
+    guard: "e_stop_active == true"
+
+parameters:
+  estop_response_ms: 100
+  max_joint_speed_normal: 1.2

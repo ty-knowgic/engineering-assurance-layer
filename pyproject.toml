@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "engineering-assurance-layer"
-version = "0.0.1"
+version = "0.0.2"
 description = "Spec-to-constraint review tool for engineering assurance workflows"
 requires-python = ">=3.11"
 dependencies = [

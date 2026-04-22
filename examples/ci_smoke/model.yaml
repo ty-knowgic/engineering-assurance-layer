@@ -1,0 +1,44 @@
+# CI smoke model — expected to pass HIGH/CRITICAL gate thresholds.
+
+entities:
+  - name: test_bench
+    description: Deterministic CI smoke fixture
+
+signals:
+  - name: speed
+    kind: actuator
+    unit: m/s
+    bounds:
+      min: 0
+      max: 5
+  - name: command
+    kind: internal
+    unit: level
+    bounds:
+      min: 0
+      max: 1
+
+states:
+  - name: IDLE
+  - name: RUNNING
+
+modes:
+  - name: NORMAL
+
+transitions:
+  - from: IDLE
+    to: RUNNING
+    guard: "command == 1"
+  - from: RUNNING
+    to: IDLE
+    guard: "command == 0"
+
+parameters:
+  max_speed_normal: 4.0
+
+mode_constraints:
+  - id: MCON-001
+    mode: NORMAL
+    signal: speed
+    operator: <=
+    value: 4.0

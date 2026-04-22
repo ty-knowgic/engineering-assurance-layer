@@ -1,0 +1,45 @@
+# Boundary clean model: aligned with spec and boundary-clean code.
+
+entities:
+  - name: conveyor_unit
+    description: Deterministic boundary-clean fixture
+
+signals:
+  - name: conveyor_speed
+    kind: actuator
+    unit: m/s
+    bounds:
+      min: 0
+      max: 1.0
+  - name: start_command
+    kind: internal
+    unit: bool
+    bounds:
+      min: 0
+      max: 1
+  - name: stop_command
+    kind: internal
+    unit: bool
+    bounds:
+      min: 0
+      max: 1
+
+states:
+  - name: IDLE
+  - name: RUNNING
+  - name: STOPPED
+
+modes:
+  - name: NORMAL
+
+transitions:
+  - from: IDLE
+    to: RUNNING
+    guard: "start_command == true"
+  - from: RUNNING
+    to: STOPPED
+    guard: "stop_command == true"
+
+parameters:
+  max_conveyor_speed: 1.0
+  loop_response_ms: 50

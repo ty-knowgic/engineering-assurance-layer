@@ -8,7 +8,7 @@ import pytest
 
 from eal.ingestion.loaders import load_spec
 from eal.extraction.spec_extractor import extract_ir_from_spec
-from eal.ir.schema import SignalKind, ConstraintType
+from eal.ir.schema import ConstraintScopeType, ConstraintType, SignalKind
 
 
 # ── Signal extraction ─────────────────────────────────────────────────────────
@@ -143,6 +143,54 @@ def test_timing_constraint_extraction(tmp_path):
     assert ir.constraints[0].constraint_type == ConstraintType.TIMING
 
 
+def test_mode_scoped_constraint_extraction(tmp_path):
+    spec = load_spec(_write_spec(tmp_path, """
+## Modes
+
+- NORMAL: standard operation
+- MAINTENANCE: maintenance mode
+
+## Signals
+
+- motor_torque: actuator, Nm, bounds=[0, 120]
+
+## Safety Constraints
+
+- CON-001: motor_torque <= 10 Nm when mode = MAINTENANCE
+"""))
+    ir = extract_ir_from_spec(spec)
+    con = next(c for c in ir.constraints if c.id == "CON-001")
+    assert con.scope_type == ConstraintScopeType.MODE
+    assert con.applies_globally is False
+    assert con.applies_in_modes == ["MAINTENANCE"]
+    assert con.related_modes == ["MAINTENANCE"]
+
+
+def test_requirement_derived_mode_scoped_constraint(tmp_path):
+    spec = load_spec(_write_spec(tmp_path, """
+## Modes
+
+- CALIBRATION: low speed
+
+## Signals
+
+- joint_speed: sensor, rad/s, bounds=[0, 2.5]
+
+## Requirements
+
+- REQ-001: Joint speed must remain <= 1.2 rad/s in CALIBRATION mode.
+"""))
+    ir = extract_ir_from_spec(spec)
+    req_constraints = [c for c in ir.constraints if c.id.startswith("REQC-REQ-001")]
+    assert len(req_constraints) == 1
+    con = req_constraints[0]
+    assert con.scope_type == ConstraintScopeType.MODE
+    assert con.applies_in_modes == ["CALIBRATION"]
+    assert con.related_signals == ["joint_speed"]
+    assert con.operator == "<="
+    assert con.numeric_value == 1.2
+
+
 # ── Transition extraction ─────────────────────────────────────────────────────
 
 def test_transition_extraction(tmp_path):
@@ -198,6 +246,40 @@ def test_mobile_robot_spec_loads(mobile_robot_spec):
     ir = extract_ir_from_spec(spec)
     assert len(ir.signals) >= 4
     assert len(ir.requirements) >= 4
+
+
+def test_model_mode_constraints_merge(tmp_path):
+    from eal.extraction import merge_model_into_ir
+    from eal.ingestion import load_model
+
+    spec = load_spec(_write_spec(tmp_path, """
+## Modes
+
+- CALIBRATION: low speed mode
+
+## Signals
+
+- joint_speed: sensor, rad/s, bounds=[0, 2.5]
+"""))
+    ir = extract_ir_from_spec(spec)
+
+    model_path = tmp_path / "model.yaml"
+    model_path.write_text(
+        "mode_constraints:\n"
+        "  - id: MCON-001\n"
+        "    mode: CALIBRATION\n"
+        "    signal: joint_speed\n"
+        "    operator: <=\n"
+        "    value: 1.2\n"
+    )
+    model = load_model(model_path)
+    merge_model_into_ir(ir, model)
+
+    con = next(c for c in ir.constraints if c.id == "MCON-001")
+    assert con.scope_type == ConstraintScopeType.MODE
+    assert con.applies_globally is False
+    assert con.applies_in_modes == ["CALIBRATION"]
+    assert con.related_signals == ["joint_speed"]
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

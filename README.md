@@ -36,8 +36,9 @@ produces machine-readable artifacts that can feed CI gates or human review workf
 5. Runs deterministic rules, including spec/model/code mismatch checks
 6. Runs mode-aware Z3-backed constraint satisfiability checks
 7. Applies severity-threshold CI gate behavior (`--fail-on-severity`)
-8. Emits 10 review artifacts, including SARIF v2.1.0 output
-9. Includes a minimal GitHub Actions workflow for test + review + artifact upload
+8. Supports deterministic rule strictness profiles (`--strictness relaxed|balanced|strict`)
+9. Emits 10 review artifacts, including SARIF v2.1.0 output
+10. Includes a minimal GitHub Actions workflow for test + review + artifact upload
 
 ---
 
@@ -49,6 +50,7 @@ produces machine-readable artifacts that can feed CI gates or human review workf
 - Python code-aware checks for constants/comparisons via `ast`
 - Mode-scoped constraint representation and conditional Z3 encoding
 - Severity-threshold gate exit behavior (`0` pass, `2` threshold fail, `1` pipeline error)
+- Rule strictness control for suppressing low-confidence heuristic findings
 - SARIF emission (`results.sarif`) derived from canonical findings
 - Minimal GitHub Actions CI workflow (`.github/workflows/eal-ci.yml`)
 
@@ -107,6 +109,29 @@ python -m eal.cli review \
   --fail-on-severity HIGH \
   --out out/robotics_arm_gate_high
 ```
+
+---
+
+## Example Corpus
+
+Examples are organized by role so they can be used for demos, regression checks,
+and rule-tuning without mixing passing and intentionally failing behavior.
+
+- `examples/ci_smoke/`
+  - Passing CI smoke fixture used by GitHub Actions.
+- `examples/robotics_arm/`
+  - Intentionally failing multi-issue demo (rules + solver + code mismatch signals).
+- `examples/mode_scope_demo/`
+  - Focused mode-scoped contradiction demo (mode-local UNSAT without false global conflict).
+- `examples/code_mismatch_demo/`
+  - Focused Python code/spec/model mismatch demo.
+- `examples/boundary_clean/`
+  - Low-noise boundary case for false-positive regression checks.
+- `examples/mobile_robot/`
+  - Broader mixed scenario with timing/forbidden-condition coverage.
+
+See [docs/examples.md](docs/examples.md) for a command table, and
+`examples/manifest.json` for machine-readable expectations.
 
 ---
 
@@ -276,6 +301,8 @@ even if empty (explicit status markers prevent silent omissions).
 | `report.html` | Simple HTML report with sortable findings table |
 | `run_metadata.json` | Run ID, version, review status, gate config/result, finding counts |
 
+`run_metadata.json` also records strictness profile and strictness-suppressed finding counts.
+
 ### SARIF Output
 
 EAL always emits `results.sarif` as a deterministic transform of `findings.json`.
@@ -310,6 +337,13 @@ Current limitation:
   - Default: `LOW`
   - Affects terminal table and `review_summary.md` top-findings presentation
   - Does not remove findings from canonical machine-readable artifacts (`findings.json`)
+- `--strictness <PROFILE>`
+  - Values: `relaxed`, `balanced`, `strict`
+  - Default: `balanced`
+  - `relaxed`: suppresses low-confidence heuristic rule findings
+  - `balanced`: standard default profile
+  - `strict`: includes all currently implemented heuristic findings
+  - Solver findings and high-confidence deterministic contradictions are unaffected
 
 ### Exit Codes
 
@@ -344,18 +378,18 @@ avoid permanent workflow failure from intentionally failing examples.
 
 ## Deterministic Rules
 
-| Rule | Category | Severity |
-|------|----------|----------|
-| Actuator/sensor signal without upper bound | `MISSING_BOUND` | MEDIUM |
-| Requirement mentions snake_case token not in Signals | `UNDEFINED_REFERENCE` | HIGH |
-| Transition references state not in States | `TRANSITION_GAP` | HIGH |
-| Forbidden condition with no guard or assumption | `FORBIDDEN_UNCHECKED` | HIGH |
-| Timing requirement with no timing parameter | `TIMING_GAP` | MEDIUM |
-| Safety-critical signal with no reliability assumption | `MISSING_ASSUMPTION` | HIGH |
-| Signal min bound violates a `<=` constraint | `CONTRADICTORY_CONSTRAINT` | CRITICAL |
-| Code constant/comparison exceeds declared bound | `CODE_BOUND_MISMATCH` | HIGH |
-| Code timing constant/threshold exceeds declared timing | `CODE_TIMING_MISMATCH` | HIGH |
-| Code parameter appears related but unmodeled | `CODE_UNMODELED_PARAMETER` | MEDIUM |
+| Rule | Category | Severity | Confidence | Strictness sensitivity |
+|------|----------|----------|------------|-----------------------|
+| Actuator/sensor signal without upper bound | `MISSING_BOUND` | MEDIUM | high | always-on |
+| Requirement mentions snake_case token not in Signals | `UNDEFINED_REFERENCE` | HIGH | medium | always-on |
+| Transition references state not in States | `TRANSITION_GAP` | HIGH | high | always-on |
+| Forbidden condition with no guard or assumption | `FORBIDDEN_UNCHECKED` | HIGH | high | always-on |
+| Timing requirement with no timing parameter | `TIMING_GAP` | MEDIUM | medium | always-on |
+| Safety-critical signal with no reliability assumption | `MISSING_ASSUMPTION` | HIGH | medium | always-on |
+| Signal min bound violates a `<=` constraint | `CONTRADICTORY_CONSTRAINT` | CRITICAL | high | always-on |
+| Code constant/comparison exceeds declared bound | `CODE_BOUND_MISMATCH` | HIGH | high | always-on |
+| Code timing constant/threshold exceeds declared timing | `CODE_TIMING_MISMATCH` | HIGH | high | always-on |
+| Code parameter appears related but unmodeled | `CODE_UNMODELED_PARAMETER` | MEDIUM | low | heuristic (suppressed in `relaxed`) |
 
 ## Z3 Checks
 
@@ -385,6 +419,7 @@ tests/test_matching.py     — deterministic code/spec name matching
 tests/test_rules.py        — each rule individually + full run on examples
 tests/test_solver.py       — Z3 checks including UNSAT case
 tests/test_cli.py          — end-to-end CLI smoke tests on both examples
+tests/test_examples_corpus.py — role-based example corpus expectations
 ```
 
 ---
@@ -407,6 +442,7 @@ Short version:
 - Z3 checks only work on numeric bounds; boolean/symbolic constraints not yet encoded
 - Mode scoping supports only explicit deterministic patterns listed above
 - Python static analysis currently covers only simple constants/comparisons
+- Strictness control currently suppresses only explicitly marked heuristic rules
 
 ---
 
@@ -416,7 +452,6 @@ Short version:
 - Broaden mode-scoped extraction beyond the current deterministic phrase patterns
 - Broaden Python checks to include additional guard patterns and more robust constant propagation
 - Further reduce false positives with tighter context-aware matching heuristics
-- Add optional per-rule strictness controls for code-analysis findings
 - Add configurable severity policies per branch/environment profile
 
 ### V0.1.0

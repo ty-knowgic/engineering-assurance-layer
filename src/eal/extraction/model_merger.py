@@ -10,13 +10,19 @@ from __future__ import annotations
 
 from eal.ingestion.loaders import ModelDocument
 from eal.ir.schema import (
-    Bounds, Constraint, ConstraintType, Entity, IRSnapshot,
+    Bounds, Constraint, ConstraintScopeType, ConstraintType, Entity, IRSnapshot,
     Mode, Signal, SignalKind, SourceRef, State, Transition,
 )
 
 
 def _src(model: ModelDocument, section: str) -> SourceRef:
     return SourceRef(file=str(model.path), section=section)
+
+
+def _scope_fields(modes: list[str]) -> tuple[ConstraintScopeType, bool]:
+    if modes:
+        return (ConstraintScopeType.MODE, False)
+    return (ConstraintScopeType.GLOBAL, True)
 
 
 def merge_model_into_ir(ir: IRSnapshot, model: ModelDocument) -> IRSnapshot:
@@ -139,6 +145,8 @@ def merge_model_into_ir(ir: IRSnapshot, model: ModelDocument) -> IRSnapshot:
                 id=cid,
                 expression_text=f"{param_name} = {param_val}",
                 constraint_type=ConstraintType.BOUND,
+                scope_type=ConstraintScopeType.GLOBAL,
+                applies_globally=True,
                 numeric_value=float(param_val),
                 source_ref=_src(model, "parameters"),
             ))
@@ -154,8 +162,63 @@ def merge_model_into_ir(ir: IRSnapshot, model: ModelDocument) -> IRSnapshot:
                 id=cid,
                 expression_text=inv,
                 constraint_type=ConstraintType.INVARIANT,
+                scope_type=ConstraintScopeType.GLOBAL,
+                applies_globally=True,
                 source_ref=_src(model, "invariants"),
             ))
             existing_con_ids.add(cid)
+
+    # ── Mode-scoped constraints (optional) ───────────────────────────────────
+    for i, entry in enumerate(data.get("mode_constraints", []), start=1):
+        if not isinstance(entry, dict):
+            continue
+        cid = str(entry.get("id") or f"MCON-{i:03d}")
+        if cid in existing_con_ids:
+            continue
+
+        signal = entry.get("signal")
+        related_signals = entry.get("related_signals", [])
+        if signal and isinstance(signal, str):
+            related_signals = [signal]
+        if not isinstance(related_signals, list):
+            continue
+        related_signals = [s for s in related_signals if isinstance(s, str)]
+        if not related_signals:
+            continue
+
+        operator = entry.get("operator")
+        value = entry.get("value")
+        if operator not in {"<=", ">=", "<", ">", "=="}:
+            continue
+        if not isinstance(value, (int, float)):
+            continue
+
+        modes_raw = entry.get("modes")
+        if isinstance(modes_raw, list):
+            modes = [m for m in modes_raw if isinstance(m, str)]
+        else:
+            mode_single = entry.get("mode")
+            modes = [mode_single] if isinstance(mode_single, str) else []
+
+        scope_type, applies_globally = _scope_fields(modes)
+        expr = entry.get("expression") or (
+            f"{', '.join(related_signals)} {operator} {value}"
+            + (f" when mode = {modes[0]}" if len(modes) == 1 else "")
+        )
+
+        ir.constraints.append(Constraint(
+            id=cid,
+            expression_text=str(expr),
+            constraint_type=ConstraintType.INVARIANT,
+            scope_type=scope_type,
+            applies_globally=applies_globally,
+            applies_in_modes=modes,
+            related_signals=related_signals,
+            related_modes=modes,
+            numeric_value=float(value),
+            operator=operator,
+            source_ref=_src(model, "mode_constraints"),
+        ))
+        existing_con_ids.add(cid)
 
     return ir

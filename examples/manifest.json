@@ -1,0 +1,95 @@
+{
+  "examples": [
+    {
+      "name": "ci_smoke",
+      "role": "passing_smoke_ci",
+      "spec": "examples/ci_smoke/spec.md",
+      "model": "examples/ci_smoke/model.yaml",
+      "code": [],
+      "expected": {
+        "gate_high_passes": true,
+        "must_include_categories": [],
+        "must_not_include_categories": [
+          "GLOBAL_CONSTRAINT_CONFLICT",
+          "MODE_SCOPED_CONFLICT",
+          "UNSAT_IN_MODE",
+          "CODE_BOUND_MISMATCH",
+          "CODE_TIMING_MISMATCH"
+        ]
+      }
+    },
+    {
+      "name": "robotics_arm",
+      "role": "intentionally_failing_multi_issue_demo",
+      "spec": "examples/robotics_arm/spec.md",
+      "model": "examples/robotics_arm/model.yaml",
+      "code": [
+        "examples/robotics_arm/controller.py"
+      ],
+      "expected": {
+        "gate_high_passes": false,
+        "must_include_categories": [
+          "TRANSITION_GAP",
+          "UNDEFINED_REFERENCE",
+          "CODE_BOUND_MISMATCH",
+          "CODE_TIMING_MISMATCH"
+        ]
+      }
+    },
+    {
+      "name": "mode_scope_demo",
+      "role": "mode_scoped_solver_demo",
+      "spec": "examples/mode_scope_demo/spec.md",
+      "model": "examples/mode_scope_demo/model.yaml",
+      "code": [],
+      "expected": {
+        "gate_high_passes": false,
+        "must_include_any_of": [
+          [
+            "UNSAT_IN_MODE",
+            "MODE_SCOPED_CONFLICT"
+          ]
+        ],
+        "must_not_include_categories": [
+          "GLOBAL_CONSTRAINT_CONFLICT"
+        ]
+      }
+    },
+    {
+      "name": "code_mismatch_demo",
+      "role": "code_vs_spec_model_mismatch_demo",
+      "spec": "examples/code_mismatch_demo/spec.md",
+      "model": "examples/code_mismatch_demo/model.yaml",
+      "code": [
+        "examples/code_mismatch_demo/controller.py"
+      ],
+      "expected": {
+        "gate_high_passes": false,
+        "must_include_categories": [
+          "CODE_BOUND_MISMATCH",
+          "CODE_TIMING_MISMATCH"
+        ]
+      }
+    },
+    {
+      "name": "boundary_clean",
+      "role": "low_noise_boundary_case",
+      "spec": "examples/boundary_clean/spec.md",
+      "model": "examples/boundary_clean/model.yaml",
+      "code": [
+        "examples/boundary_clean/controller.py"
+      ],
+      "expected": {
+        "gate_high_passes": true,
+        "must_not_include_categories": [
+          "CODE_BOUND_MISMATCH",
+          "CODE_TIMING_MISMATCH",
+          "CODE_UNMODELED_PARAMETER",
+          "GLOBAL_CONSTRAINT_CONFLICT",
+          "MODE_SCOPED_CONFLICT",
+          "UNSAT_IN_MODE"
+        ]
+      }
+    }
+  ]
+}

@@ -48,6 +48,11 @@ class ConstraintType(str, Enum):
     FORBIDDEN = "forbidden"   # must never hold
 
 
+class ConstraintScopeType(str, Enum):
+    GLOBAL = "global"
+    MODE = "mode"
+
+
 class AssumptionType(str, Enum):
     HARDWARE = "hardware"
     ENVIRONMENT = "environment"
@@ -55,6 +60,12 @@ class AssumptionType(str, Enum):
     OPERATOR = "operator"
     EXTERNAL = "external"
     UNCLASSIFIED = "unclassified"
+
+
+class CodeSymbolClass(str, Enum):
+    SIGNAL_BOUND_CANDIDATE = "signal_bound_candidate"
+    TIMING_PARAMETER_CANDIDATE = "timing_parameter_candidate"
+    GENERIC_NUMERIC_CONSTANT = "generic_numeric_constant"
 
 
 # ── Core IR nodes ─────────────────────────────────────────────────────────────
@@ -98,6 +109,9 @@ class Constraint(BaseModel):
     expression_text: str
     normalized_form: Optional[str] = None
     constraint_type: ConstraintType = ConstraintType.BOUND
+    scope_type: ConstraintScopeType = ConstraintScopeType.GLOBAL
+    applies_globally: bool = True
+    applies_in_modes: list[str] = Field(default_factory=list)
     related_signals: list[str] = Field(default_factory=list)
     related_states: list[str] = Field(default_factory=list)
     related_modes: list[str] = Field(default_factory=list)
@@ -129,6 +143,54 @@ class Entity(BaseModel):
     source_ref: Optional[SourceRef] = None
 
 
+class CodeConstant(BaseModel):
+    evidence_id: str
+    file: str
+    line: int
+    symbol: str
+    normalized_name: str
+    value: float
+    snippet: Optional[str] = None
+    scope: str = "module"
+    classification: CodeSymbolClass = CodeSymbolClass.GENERIC_NUMERIC_CONSTANT
+    classification_confidence: float = 0.0
+    classification_reason: Optional[str] = None
+    match_candidates: list[str] = Field(default_factory=list)
+    match_confidence: Optional[float] = None
+    match_reason: Optional[str] = None
+
+
+class CodeComparison(BaseModel):
+    evidence_id: str
+    file: str
+    line: int
+    symbol: str
+    normalized_name: str
+    operator: str
+    value: float
+    snippet: Optional[str] = None
+    context: Optional[str] = None
+    classification: CodeSymbolClass = CodeSymbolClass.GENERIC_NUMERIC_CONSTANT
+    classification_confidence: float = 0.0
+    classification_reason: Optional[str] = None
+    match_candidates: list[str] = Field(default_factory=list)
+    match_confidence: Optional[float] = None
+    match_reason: Optional[str] = None
+
+
+class CodeEvidence(BaseModel):
+    evidence_id: str
+    kind: str
+    file: str
+    line: Optional[int] = None
+    symbol: Optional[str] = None
+    normalized_name: Optional[str] = None
+    value: Optional[float] = None
+    operator: Optional[str] = None
+    snippet: Optional[str] = None
+    message: Optional[str] = None
+
+
 # ── Top-level IR container ────────────────────────────────────────────────────
 
 class IRSnapshot(BaseModel):
@@ -150,6 +212,9 @@ class IRSnapshot(BaseModel):
     requirements: list[Requirement] = Field(default_factory=list)
     constraints: list[Constraint] = Field(default_factory=list)
     assumptions: list[Assumption] = Field(default_factory=list)
+    code_constants: list[CodeConstant] = Field(default_factory=list)
+    code_comparisons: list[CodeComparison] = Field(default_factory=list)
+    code_evidence: list[CodeEvidence] = Field(default_factory=list)
 
     # Extraction notes
     extraction_warnings: list[str] = Field(default_factory=list)

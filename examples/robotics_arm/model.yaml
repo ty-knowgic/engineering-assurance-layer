@@ -1,6 +1,7 @@
 # Robotics arm model — YAML constraint model
-# INTENTIONAL ISSUE: joint_speed minimum bound is set to 1.5, but
-# CON-002 requires joint_speed <= 1.2 → Z3 will detect UNSAT.
+# INTENTIONAL ISSUE: joint_speed minimum bound is set to 1.5, while
+# calibration limits require joint_speed <= 1.2. This should be UNSAT
+# in CALIBRATION mode (mode-scoped), not a false global contradiction.
 
 entities:
   - name: robot_arm
@@ -15,7 +16,7 @@ signals:
     kind: sensor
     unit: rad/s
     bounds:
-      min: 1.5    # INTENTIONAL CONTRADICTION: min > CON-002 max (1.2)
+      min: 1.5    # INTENTIONAL MODE-SCOPED CONTRADICTION vs CALIBRATION limits (1.2)
       max: 2.5
   - name: motor_torque
     kind: actuator
