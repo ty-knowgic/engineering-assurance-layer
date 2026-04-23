@@ -42,9 +42,9 @@ jobs:
       - name: Check SARIF availability
         id: sarif_check
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ] && [ "${{ github.event.pull_request.head.repo.fork }}" = "true" ]; then
+          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
             echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "Skipping SARIF upload for fork-based pull request"
+            echo "Skipping SARIF upload on pull_request events"
           elif [ -f out/ci_smoke_review/results.sarif ]; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else
