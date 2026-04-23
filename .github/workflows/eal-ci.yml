@@ -31,7 +31,7 @@ jobs:
       - name: Run tests
         run: pytest
 
-      - name: Run EAL CI smoke review (policy: ci)
+      - name: "Run EAL CI smoke review (policy: ci)"
         run: |
           python -m eal.cli review \
             --spec examples/ci_smoke/spec.md \
