@@ -1,0 +1,67 @@
+entities:
+  - name: spindle_unit
+    description: rotating tool subsystem
+  - name: clamp_unit
+    description: workpiece clamp subsystem
+
+signals:
+  - name: spindle_speed_rpm
+    kind: sensor
+    unit: rpm
+    bounds:
+      min: 0
+      max: 500
+  - name: clamp_pressure_bar
+    kind: sensor
+    unit: bar
+    bounds:
+      min: 0
+      max: 10
+  - name: door_closed
+    kind: sensor
+    unit: bool
+    bounds:
+      min: 0
+      max: 1
+  - name: interlock_channel_ok
+    kind: sensor
+    unit: bool
+    bounds:
+      min: 0
+      max: 1
+  - name: e_stop_active
+    kind: sensor
+    unit: bool
+    bounds:
+      min: 0
+      max: 1
+
+states:
+  - name: IDLE
+  - name: ARMED
+  - name: MACHINING
+  - name: SAFE_STOP
+
+modes:
+  - name: AUTO
+  - name: SETUP
+  - name: MAINTENANCE
+
+transitions:
+  - from: IDLE
+    to: ARMED
+    guard: "interlock_channel_ok == true"
+  - from: ARMED
+    to: MACHINING
+    guard: "door_closed == true"
+  - from: MACHINING
+    to: SAFE_STOP
+    guard: "e_stop_active == true"
+
+mode_constraints:
+  - id: MCON-SETUP-SPINDLE
+    mode: SETUP
+    signal: spindle_speed_rpm
+    operator: <=
+    value: 300
+

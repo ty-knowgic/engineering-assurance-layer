@@ -125,3 +125,70 @@ def test_ci_smoke_still_passes_high_gate(tmp_path):
     assert result.exit_code == 0, result.output
     assert categories == set()
     assert metadata["gate"]["failed"] is False
+
+
+def test_complex_control_system_validation_testbed(tmp_path):
+    result, categories, metadata = _run_review(
+        tmp_path,
+        spec=EXAMPLES / "complex_control_system" / "spec.md",
+        model=EXAMPLES / "complex_control_system" / "model.yaml",
+        code=[EXAMPLES / "complex_control_system" / "controller.py"],
+        fail_on="HIGH",
+    )
+    assert result.exit_code == 2, result.output
+    assert "CODE_BOUND_MISMATCH" in categories
+    assert "CODE_TIMING_MISMATCH" in categories
+    assert "UNSAT_IN_MODE" in categories or "MODE_SCOPED_CONFLICT" in categories
+    assert metadata["gate"]["failed"] is True
+
+
+def test_system_interlock_demo_validation_testbed(tmp_path):
+    result, categories, metadata = _run_review(
+        tmp_path,
+        spec=EXAMPLES / "system_interlock_demo" / "spec.md",
+        model=EXAMPLES / "system_interlock_demo" / "model.yaml",
+        code=[EXAMPLES / "system_interlock_demo" / "controller.py"],
+        fail_on="HIGH",
+    )
+    assert result.exit_code == 2, result.output
+    assert "FORBIDDEN_UNCHECKED" in categories
+    assert "TRANSITION_GAP" in categories
+    assert "UNDEFINED_REFERENCE" in categories
+    assert "CODE_BOUND_MISMATCH" in categories
+    assert "CODE_TIMING_MISMATCH" in categories
+    assert metadata["gate"]["failed"] is True
+
+
+def test_subsystem_interface_review_validation_testbed(tmp_path):
+    result, categories, metadata = _run_review(
+        tmp_path,
+        spec=EXAMPLES / "subsystem_interface_review" / "spec.md",
+        model=EXAMPLES / "subsystem_interface_review" / "model.yaml",
+        code=[EXAMPLES / "subsystem_interface_review" / "controller.py"],
+        fail_on="HIGH",
+    )
+    assert result.exit_code == 2, result.output
+    assert "CODE_BOUND_MISMATCH" in categories
+    assert "CODE_TIMING_MISMATCH" in categories
+    assert "UNDEFINED_REFERENCE" in categories
+    assert "FORBIDDEN_UNCHECKED" in categories
+    assert metadata["gate"]["failed"] is True
+
+
+def test_smacc2_atomic_mode_states_validation_slice_clean_baseline(tmp_path):
+    result, categories, metadata = _run_review(
+        tmp_path,
+        spec=EXAMPLES / "smacc2_atomic_mode_states" / "spec.md",
+        model=EXAMPLES / "smacc2_atomic_mode_states" / "model.yaml",
+        fail_on="HIGH",
+    )
+    assert result.exit_code == 0, result.output
+    assert "TRANSITION_GAP" not in categories
+    assert "UNDEFINED_REFERENCE" not in categories
+    assert "TIMING_GAP" not in categories
+    assert "FORBIDDEN_UNCHECKED" not in categories
+    assert "GLOBAL_CONSTRAINT_CONFLICT" not in categories
+    assert "MODE_SCOPED_CONFLICT" not in categories
+    assert "UNSAT_IN_MODE" not in categories
+    assert metadata["gate"]["failed"] is False
+    assert metadata["results"]["highest_severity_found"] in {"NONE", "LOW", "MEDIUM"}

@@ -82,6 +82,8 @@ def _write_review_summary(
     fail_on_severity: str,
     min_severity: str,
     strictness: str,
+    policy_profile: str,
+    policy_sources: dict[str, str],
     suppressed_finding_count: int,
     highest_severity_found: str,
     gate_failed: bool,
@@ -109,8 +111,10 @@ def _write_review_summary(
         f"**Highest severity found:** `{highest_severity_found}`",
         f"**Gate threshold:** `{fail_on_severity}`",
         f"**Gate result:** {'✅ PASS' if gate_status == 'PASS' else '❌ FAIL'}",
+        f"**Policy profile:** `{policy_profile}`",
         f"**Presentation minimum severity:** `{min_severity}`",
         f"**Rule strictness:** `{strictness}`",
+        f"**Policy source map:** `{json.dumps(policy_sources, sort_keys=True)}`",
         f"**Strictness-suppressed findings:** `{suppressed_finding_count}`",
         f"**SARIF artifact:** `{sarif_file}`",
         "",
@@ -313,6 +317,8 @@ def _write_html_report(out: Path, ir: IRSnapshot, findings: list[Finding], run_i
     by_sev = _findings_by_severity(findings)
     critical = len(by_sev["CRITICAL"])
     high = len(by_sev["HIGH"])
+    medium = len(by_sev["MEDIUM"])
+    low = len(by_sev["LOW"])
 
     status_color = "#d32f2f" if (critical or high) else "#2e7d32"
     status_text = "REVIEW REQUIRED" if (critical or high) else "PASS"
@@ -335,6 +341,14 @@ def _write_html_report(out: Path, ir: IRSnapshot, findings: list[Finding], run_i
             f"<td><strong>{f.title}</strong><br>{f.summary}{ce}</td>"
             f"<td>{f.suggested_fix}</td>"
             f"</tr>\n"
+        )
+    findings_table_html = "<p><em>No findings.</em></p>"
+    if findings:
+        findings_table_html = (
+            "<table>\n"
+            "<tr><th>ID</th><th>Severity</th><th>Category</th><th>Finding</th><th>Suggested Fix</th></tr>\n"
+            f"{rows}"
+            "</table>"
         )
 
     html = f"""<!DOCTYPE html>
@@ -363,8 +377,8 @@ def _write_html_report(out: Path, ir: IRSnapshot, findings: list[Finding], run_i
 <h2>Summary</h2>
 <div class="stat"><strong style="color:#d32f2f">{critical}</strong>CRITICAL</div>
 <div class="stat"><strong style="color:#f57c00">{high}</strong>HIGH</div>
-<div class="stat"><strong style="color:#fbc02d">{len(by_sev['MEDIUM'])}</strong>MEDIUM</div>
-<div class="stat"><strong style="color:#1976d2">{len(by_sev['LOW'])}</strong>LOW</div>
+<div class="stat"><strong style="color:#fbc02d">{medium}</strong>MEDIUM</div>
+<div class="stat"><strong style="color:#1976d2">{low}</strong>LOW</div>
 
 <h2>IR Extraction</h2>
 <p>Signals: {len(ir.signals)} &nbsp;|&nbsp; States: {len(ir.states)} &nbsp;|&nbsp;
@@ -372,11 +386,7 @@ Modes: {len(ir.modes)} &nbsp;|&nbsp; Requirements: {len(ir.requirements)} &nbsp;
 Constraints: {len(ir.constraints)} &nbsp;|&nbsp; Assumptions: {len(ir.assumptions)}</p>
 
 <h2>Findings ({len(findings)})</h2>
-{"<p><em>No findings.</em></p>" if not findings else f"""
-<table>
-<tr><th>ID</th><th>Severity</th><th>Category</th><th>Finding</th><th>Suggested Fix</th></tr>
-{rows}
-</table>"""}
+{findings_table_html}
 
 </body>
 </html>"""
@@ -398,6 +408,8 @@ def _write_run_metadata(
     fail_on_severity: str,
     min_severity: str,
     strictness: str,
+    policy_profile: str,
+    policy_sources: dict[str, str],
     suppressed_finding_count: int,
     suppressed_by_rule: dict[str, int],
     gate_failed: bool,
@@ -430,6 +442,16 @@ def _write_run_metadata(
             "result": "FAIL" if gate_failed else "PASS",
             "exit_reason": exit_reason,
         },
+        "policy": {
+            "profile": policy_profile,
+            "effective": {
+                "fail_on_severity": fail_on_severity,
+                "min_severity": min_severity,
+                "strictness": strictness,
+            },
+            "sources": policy_sources,
+            "notes": "Precedence: explicit CLI flags override selected policy profile defaults.",
+        },
         "strictness": {
             "level": strictness,
             "suppressed_finding_count": suppressed_finding_count,
@@ -459,6 +481,8 @@ def write_artifacts(
     fail_on_severity: str = "NONE",
     min_severity: str = "LOW",
     strictness: str = "balanced",
+    policy_profile: str = "local",
+    policy_sources: Optional[dict[str, str]] = None,
     suppressed_finding_count: int = 0,
     suppressed_by_rule: Optional[dict[str, int]] = None,
     highest_severity_found: str = "NONE",
@@ -481,6 +505,8 @@ def write_artifacts(
         fail_on_severity=fail_on_severity,
         min_severity=min_severity,
         strictness=strictness,
+        policy_profile=policy_profile,
+        policy_sources=policy_sources or {},
         suppressed_finding_count=suppressed_finding_count,
         highest_severity_found=highest_severity_found,
         gate_failed=gate_failed,
@@ -508,6 +534,8 @@ def write_artifacts(
         fail_on_severity=fail_on_severity,
         min_severity=min_severity,
         strictness=strictness,
+        policy_profile=policy_profile,
+        policy_sources=policy_sources or {},
         suppressed_finding_count=suppressed_finding_count,
         suppressed_by_rule=suppressed_by_rule or {},
         gate_failed=gate_failed,

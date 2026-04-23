@@ -55,7 +55,7 @@ def test_review_ci_smoke_passes_high_gate(tmp_path):
         "review",
         "--spec", str(EXAMPLES / "ci_smoke" / "spec.md"),
         "--model", str(EXAMPLES / "ci_smoke" / "model.yaml"),
-        "--fail-on-severity", "HIGH",
+        "--policy-profile", "ci",
         "--out", str(out_dir),
     ])
     assert result.exit_code == 0, result.output
@@ -63,6 +63,8 @@ def test_review_ci_smoke_passes_high_gate(tmp_path):
     metadata = json.loads((out_dir / "run_metadata.json").read_text())
     assert metadata["gate"]["fail_on_severity"] == "HIGH"
     assert metadata["gate"]["failed"] is False
+    assert metadata["policy"]["profile"] == "ci"
+    assert metadata["policy"]["effective"]["strictness"] == "balanced"
     assert metadata["results"]["highest_severity_found"] in {"NONE", "LOW", "MEDIUM"}
     assert (out_dir / "results.sarif").exists()
 
@@ -145,6 +147,7 @@ def test_run_metadata_has_version(tmp_path):
     assert data["run_id"].startswith("eal-")
     assert data["artifacts"]["sarif"]["generated"] is True
     assert data["artifacts"]["sarif"]["file"] == "results.sarif"
+    assert data["policy"]["profile"] == "local"
 
 
 def test_review_code_input_changes_findings(tmp_path):
@@ -212,8 +215,55 @@ def test_review_default_gate_behavior_does_not_fail_process(tmp_path):
     data = json.loads((out_dir / "run_metadata.json").read_text())
     assert data["gate"]["fail_on_severity"] == "NONE"
     assert data["gate"]["failed"] is False
+    assert data["policy"]["profile"] == "local"
     assert data["strictness"]["level"] == "balanced"
     assert data["results"]["highest_severity_found"] in {"CRITICAL", "HIGH", "MEDIUM", "LOW", "NONE"}
+
+
+def test_review_main_profile_uses_relaxed_strictness(tmp_path):
+    import json
+
+    out_dir = tmp_path / "out_main_profile"
+    result = runner.invoke(app, [
+        "review",
+        "--spec", str(EXAMPLES / "robotics_arm" / "spec.md"),
+        "--model", str(EXAMPLES / "robotics_arm" / "model.yaml"),
+        "--code", str(EXAMPLES / "robotics_arm" / "controller.py"),
+        "--policy-profile", "main",
+        "--out", str(out_dir),
+    ])
+    assert result.exit_code == 2, result.output
+
+    metadata = json.loads((out_dir / "run_metadata.json").read_text())
+    assert metadata["policy"]["profile"] == "main"
+    assert metadata["gate"]["fail_on_severity"] == "HIGH"
+    assert metadata["strictness"]["level"] == "relaxed"
+
+
+def test_review_policy_profile_overrides_can_be_explicitly_replaced(tmp_path):
+    import json
+
+    out_dir = tmp_path / "out_policy_override"
+    result = runner.invoke(app, [
+        "review",
+        "--spec", str(EXAMPLES / "ci_smoke" / "spec.md"),
+        "--model", str(EXAMPLES / "ci_smoke" / "model.yaml"),
+        "--policy-profile", "ci",
+        "--fail-on-severity", "CRITICAL",
+        "--strictness", "strict",
+        "--min-severity", "HIGH",
+        "--out", str(out_dir),
+    ])
+    assert result.exit_code == 0, result.output
+
+    metadata = json.loads((out_dir / "run_metadata.json").read_text())
+    assert metadata["policy"]["profile"] == "ci"
+    assert metadata["policy"]["effective"]["fail_on_severity"] == "CRITICAL"
+    assert metadata["policy"]["effective"]["strictness"] == "strict"
+    assert metadata["policy"]["effective"]["min_severity"] == "HIGH"
+    assert metadata["policy"]["sources"]["fail_on_severity"] == "explicit_flag"
+    assert metadata["policy"]["sources"]["strictness"] == "explicit_flag"
+    assert metadata["policy"]["sources"]["min_severity"] == "explicit_flag"
 
 
 def test_review_fail_on_severity_critical(tmp_path):
@@ -418,6 +468,18 @@ def test_review_invalid_strictness_rejected(tmp_path):
     ])
     assert result.exit_code != 0
     assert "Invalid value for '--strictness'" in result.output
+
+
+def test_review_invalid_policy_profile_rejected(tmp_path):
+    result = runner.invoke(app, [
+        "review",
+        "--spec", str(EXAMPLES / "robotics_arm" / "spec.md"),
+        "--model", str(EXAMPLES / "robotics_arm" / "model.yaml"),
+        "--policy-profile", "prod",
+        "--out", str(tmp_path / "out_invalid_policy_profile"),
+    ])
+    assert result.exit_code != 0
+    assert "Invalid value for '--policy-profile'" in result.output
 
 
 def test_review_sarif_contains_code_mismatch_rule(tmp_path):

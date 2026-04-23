@@ -37,8 +37,9 @@ produces machine-readable artifacts that can feed CI gates or human review workf
 6. Runs mode-aware Z3-backed constraint satisfiability checks
 7. Applies severity-threshold CI gate behavior (`--fail-on-severity`)
 8. Supports deterministic rule strictness profiles (`--strictness relaxed|balanced|strict`)
-9. Emits 10 review artifacts, including SARIF v2.1.0 output
-10. Includes a minimal GitHub Actions workflow for test + review + artifact upload
+9. Supports built-in policy profiles for operational contexts (`--policy-profile`)
+10. Emits 10 review artifacts, including SARIF v2.1.0 output
+11. Includes a minimal GitHub Actions workflow for test + review + artifact upload
 
 ---
 
@@ -51,6 +52,7 @@ produces machine-readable artifacts that can feed CI gates or human review workf
 - Mode-scoped constraint representation and conditional Z3 encoding
 - Severity-threshold gate exit behavior (`0` pass, `2` threshold fail, `1` pipeline error)
 - Rule strictness control for suppressing low-confidence heuristic findings
+- Built-in policy profiles with explicit-flag override precedence
 - SARIF emission (`results.sarif`) derived from canonical findings
 - Minimal GitHub Actions CI workflow (`.github/workflows/eal-ci.yml`)
 
@@ -127,6 +129,14 @@ and rule-tuning without mixing passing and intentionally failing behavior.
   - Focused Python code/spec/model mismatch demo.
 - `examples/boundary_clean/`
   - Low-noise boundary case for false-positive regression checks.
+- `examples/complex_control_system/`
+  - Validation testbed for multi-mode control envelopes, timing, and code threshold mismatches.
+- `examples/system_interlock_demo/`
+  - Validation testbed for interlock structure quality, forbidden-condition coverage, and code threshold mismatches.
+- `examples/subsystem_interface_review/`
+  - Validation testbed for subsystem boundary/interface consistency across modes and timing expectations.
+- `examples/smacc2_atomic_mode_states/`
+  - Real-world validation slice based on SMACC2 `sm_atomic_mode_states` concepts; intentionally modeled as a clean assurance baseline.
 - `examples/mobile_robot/`
   - Broader mixed scenario with timing/forbidden-condition coverage.
 
@@ -328,22 +338,34 @@ Current limitation:
 
 `eal review` supports deterministic severity-threshold gating:
 
+- `--policy-profile <NAME>`
+  - Values: `local`, `ci`, `main`, `strict`
+  - Default: `local`
+  - Built-in defaults:
+    - `local` → `fail_on_severity=NONE`, `strictness=balanced`, `min_severity=LOW`
+    - `ci` → `fail_on_severity=HIGH`, `strictness=balanced`, `min_severity=LOW`
+    - `main` → `fail_on_severity=HIGH`, `strictness=relaxed`, `min_severity=LOW`
+    - `strict` → `fail_on_severity=MEDIUM`, `strictness=strict`, `min_severity=LOW`
 - `--fail-on-severity <LEVEL>`
   - Values: `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`, `NONE`
-  - Default: `NONE` (preserves historical behavior: completed reviews do not fail process)
+  - Default via policy profile (`local` resolves to `NONE`)
   - Semantics: fail when highest finding severity is at or above the threshold
 - `--min-severity <LEVEL>`
   - Values: `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`
-  - Default: `LOW`
+  - Default via policy profile (all built-ins currently resolve to `LOW`)
   - Affects terminal table and `review_summary.md` top-findings presentation
   - Does not remove findings from canonical machine-readable artifacts (`findings.json`)
 - `--strictness <PROFILE>`
   - Values: `relaxed`, `balanced`, `strict`
-  - Default: `balanced`
+  - Default via policy profile (`local` resolves to `balanced`)
   - `relaxed`: suppresses low-confidence heuristic rule findings
   - `balanced`: standard default profile
   - `strict`: includes all currently implemented heuristic findings
   - Solver findings and high-confidence deterministic contradictions are unaffected
+
+Precedence:
+- Explicit CLI flags override profile defaults (`--fail-on-severity`, `--min-severity`, `--strictness`).
+- `run_metadata.json` records selected profile, effective values, and whether each value came from profile defaults or explicit flags.
 
 ### Exit Codes
 
@@ -364,7 +386,7 @@ It runs on `push` and `pull_request` and executes:
 1. `pip install -e ".[dev]"`
 2. `pytest`
 3. `python -m eal.cli review` against `examples/ci_smoke` with
-   `--fail-on-severity HIGH`
+   `--policy-profile ci`
 4. publishes `out/ci_smoke_review/results.sarif` to GitHub code scanning
 
 The workflow uploads `out/ci_smoke_review` as a build artifact, which includes
@@ -424,6 +446,7 @@ tests/test_extraction.py   — markdown parsing
 tests/test_ir.py           — IR schema and helpers
 tests/test_code_analysis.py — Python AST extraction
 tests/test_matching.py     — deterministic code/spec name matching
+tests/test_policy.py       — built-in policy profile resolution + override precedence
 tests/test_rules.py        — each rule individually + full run on examples
 tests/test_solver.py       — Z3 checks including UNSAT case
 tests/test_cli.py          — end-to-end CLI smoke tests on both examples
@@ -460,7 +483,7 @@ Short version:
 - Broaden mode-scoped extraction beyond the current deterministic phrase patterns
 - Broaden Python checks to include additional guard patterns and more robust constant propagation
 - Further reduce false positives with tighter context-aware matching heuristics
-- Add configurable severity policies per branch/environment profile
+- Add optional user-defined profile files on top of built-in policy profiles
 
 ### V0.1.0
 - LLM-assisted extraction pass (optional, requires API key)

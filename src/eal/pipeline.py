@@ -45,6 +45,8 @@ def run_review(
     fail_on_severity: str = "NONE",
     min_severity: str = "LOW",
     strictness: str = "balanced",
+    policy_profile: str = "local",
+    policy_sources: Optional[dict[str, str]] = None,
 ) -> int:
     """
     Run a full assurance review.
@@ -67,6 +69,7 @@ def run_review(
         logger.info("  gate fail-on severity: %s", fail_on_severity)
         logger.info("  min-severity (presentation): %s", min_severity)
         logger.info("  strictness: %s", strictness)
+        logger.info("  policy profile: %s", policy_profile)
 
         # ── Stage 1: Ingest ───────────────────────────────────────────────────
         spec = load_spec(spec_path)
@@ -138,6 +141,8 @@ def run_review(
             fail_on_severity=fail_on_severity,
             min_severity=min_severity,
             strictness=strictness_level.value,
+            policy_profile=policy_profile,
+            policy_sources=policy_sources or {},
             suppressed_finding_count=len(suppressed_rule_findings),
             suppressed_by_rule=dict(suppressed_by_rule),
             highest_severity_found=highest,

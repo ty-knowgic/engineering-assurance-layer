@@ -90,6 +90,84 @@
           "UNSAT_IN_MODE"
         ]
       }
+    },
+    {
+      "name": "complex_control_system",
+      "role": "validation_testbed_complex_multi_mode_control",
+      "spec": "examples/complex_control_system/spec.md",
+      "model": "examples/complex_control_system/model.yaml",
+      "code": [
+        "examples/complex_control_system/controller.py"
+      ],
+      "expected": {
+        "gate_high_passes": false,
+        "must_include_categories": [
+          "CODE_BOUND_MISMATCH",
+          "CODE_TIMING_MISMATCH"
+        ],
+        "must_include_any_of": [
+          [
+            "UNSAT_IN_MODE",
+            "MODE_SCOPED_CONFLICT"
+          ]
+        ]
+      }
+    },
+    {
+      "name": "system_interlock_demo",
+      "role": "validation_testbed_interlock_and_structure_review",
+      "spec": "examples/system_interlock_demo/spec.md",
+      "model": "examples/system_interlock_demo/model.yaml",
+      "code": [
+        "examples/system_interlock_demo/controller.py"
+      ],
+      "expected": {
+        "gate_high_passes": false,
+        "must_include_categories": [
+          "FORBIDDEN_UNCHECKED",
+          "TRANSITION_GAP",
+          "UNDEFINED_REFERENCE",
+          "CODE_BOUND_MISMATCH",
+          "CODE_TIMING_MISMATCH"
+        ]
+      }
+    },
+    {
+      "name": "subsystem_interface_review",
+      "role": "validation_testbed_subsystem_boundary_review",
+      "spec": "examples/subsystem_interface_review/spec.md",
+      "model": "examples/subsystem_interface_review/model.yaml",
+      "code": [
+        "examples/subsystem_interface_review/controller.py"
+      ],
+      "expected": {
+        "gate_high_passes": false,
+        "must_include_categories": [
+          "CODE_BOUND_MISMATCH",
+          "CODE_TIMING_MISMATCH",
+          "UNDEFINED_REFERENCE",
+          "FORBIDDEN_UNCHECKED"
+        ]
+      }
+    },
+    {
+      "name": "smacc2_atomic_mode_states",
+      "role": "validation_testbed_real_world_smacc2_assurance_slice",
+      "spec": "examples/smacc2_atomic_mode_states/spec.md",
+      "model": "examples/smacc2_atomic_mode_states/model.yaml",
+      "code": [],
+      "expected": {
+        "gate_high_passes": true,
+        "must_not_include_categories": [
+          "TRANSITION_GAP",
+          "UNDEFINED_REFERENCE",
+          "TIMING_GAP",
+          "FORBIDDEN_UNCHECKED",
+          "GLOBAL_CONSTRAINT_CONFLICT",
+          "MODE_SCOPED_CONFLICT",
+          "UNSAT_IN_MODE"
+        ]
+      }
     }
   ]
 }

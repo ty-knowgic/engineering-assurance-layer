@@ -1,0 +1,82 @@
+entities:
+  - name: drive_controller
+    description: traction subsystem controller
+  - name: arm_controller
+    description: manipulator subsystem controller
+
+signals:
+  - name: drive_speed_mps
+    kind: actuator
+    unit: mps
+    bounds:
+      min: 0.0
+      max: 2.0
+  - name: arm_torque_nm
+    kind: actuator
+    unit: nm
+    bounds:
+      min: 0.0
+      max: 60.0
+  - name: interface_latency_ms
+    kind: timing
+    unit: ms
+    bounds:
+      min: 0.0
+      max: 80.0
+  - name: watchdog_timeout_ms
+    kind: timing
+    unit: ms
+    bounds:
+      min: 0.0
+      max: 90.0
+  - name: safety_channel_ok
+    kind: sensor
+    unit: bool
+    bounds:
+      min: 0
+      max: 1
+  - name: e_stop_active
+    kind: sensor
+    unit: bool
+    bounds:
+      min: 0
+      max: 1
+
+states:
+  - name: IDLE
+  - name: COORDINATED_RUN
+  - name: DEGRADED
+  - name: SAFE_STOP
+
+modes:
+  - name: NORMAL
+  - name: DOCKING
+  - name: SERVICE
+
+transitions:
+  - from: IDLE
+    to: COORDINATED_RUN
+    guard: "mission_ready == true"
+  - from: COORDINATED_RUN
+    to: SAFE_STOP
+    guard: "e_stop_active == true"
+  - from: DEGRADED
+    to: SAFE_STOP
+    guard: "watchdog_timeout == true"
+
+parameters:
+  interface_latency_ms: 80
+  estop_response_ms: 90
+
+mode_constraints:
+  - id: MCON-DOCK-SPEED
+    mode: DOCKING
+    signal: drive_speed_mps
+    operator: <=
+    value: 0.6
+  - id: MCON-SERVICE-TORQUE
+    mode: SERVICE
+    signal: arm_torque_nm
+    operator: <=
+    value: 15.0
+

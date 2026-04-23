@@ -16,6 +16,8 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from eal.policy import resolve_policy
+
 app = typer.Typer(
     name="eal",
     help="Engineering Assurance Layer — spec-to-constraint review tool",
@@ -51,6 +53,13 @@ class StrictnessOption(str, Enum):
     STRICT = "strict"
 
 
+class PolicyProfileOption(str, Enum):
+    LOCAL = "local"
+    CI = "ci"
+    MAIN = "main"
+    STRICT = "strict"
+
+
 def _setup_logging(level: str) -> None:
     logging.basicConfig(
         level=getattr(logging, level.upper(), logging.INFO),
@@ -83,20 +92,25 @@ def review(
         "--out", "-o",
         help="Output directory for review artifacts",
     ),
-    fail_on_severity: FailOnSeverityOption = typer.Option(
-        FailOnSeverityOption.NONE,
+    policy_profile: PolicyProfileOption = typer.Option(
+        PolicyProfileOption.LOCAL,
+        "--policy-profile",
+        help="Built-in policy profile for gate + strictness defaults",
+    ),
+    fail_on_severity: Optional[FailOnSeverityOption] = typer.Option(
+        None,
         "--fail-on-severity",
-        help="Fail the process when finding severity is at or above this threshold",
+        help="Fail process when severity is at/above threshold (overrides policy profile)",
     ),
-    min_severity: MinSeverityOption = typer.Option(
-        MinSeverityOption.LOW,
+    min_severity: Optional[MinSeverityOption] = typer.Option(
+        None,
         "--min-severity",
-        help="Minimum severity shown in terminal and review_summary.md top findings",
+        help="Minimum severity shown in terminal/summary (overrides policy profile)",
     ),
-    strictness: StrictnessOption = typer.Option(
-        StrictnessOption.BALANCED,
+    strictness: Optional[StrictnessOption] = typer.Option(
+        None,
         "--strictness",
-        help="Rule strictness profile (relaxed suppresses heuristic findings)",
+        help="Rule strictness profile (overrides policy profile)",
     ),
     log_level: str = typer.Option("INFO", "--log-level", help="Logging level"),
 ) -> None:
@@ -104,6 +118,12 @@ def review(
     _setup_logging(log_level)
 
     code_paths: list[Path] = list(code) if code else []
+    resolved_policy = resolve_policy(
+        profile=policy_profile.value,
+        fail_on_severity=fail_on_severity.value if fail_on_severity else None,
+        min_severity=min_severity.value if min_severity else None,
+        strictness=strictness.value if strictness else None,
+    )
 
     console.rule("[bold blue]Engineering Assurance Layer[/bold blue]")
     console.print(f"  Spec:  [cyan]{spec}[/cyan]")
@@ -112,9 +132,10 @@ def review(
         for cp in code_paths:
             console.print(f"  Code:  [cyan]{cp}[/cyan]")
     console.print(f"  Out:   [cyan]{out}[/cyan]")
-    console.print(f"  Gate:  fail on [cyan]{fail_on_severity.value}[/cyan] and above")
-    console.print(f"  View:  min severity [cyan]{min_severity.value}[/cyan]")
-    console.print(f"  Rules: strictness [cyan]{strictness.value}[/cyan]")
+    console.print(f"  Policy: [cyan]{resolved_policy.profile.value}[/cyan]")
+    console.print(f"  Gate:  fail on [cyan]{resolved_policy.fail_on_severity}[/cyan] and above")
+    console.print(f"  View:  min severity [cyan]{resolved_policy.min_severity}[/cyan]")
+    console.print(f"  Rules: strictness [cyan]{resolved_policy.strictness}[/cyan]")
     console.print()
 
     from eal.pipeline import run_review
@@ -124,9 +145,11 @@ def review(
         model_path=model,
         code_paths=code_paths,
         out_dir=out,
-        fail_on_severity=fail_on_severity.value,
-        min_severity=min_severity.value,
-        strictness=strictness.value,
+        fail_on_severity=resolved_policy.fail_on_severity,
+        min_severity=resolved_policy.min_severity,
+        strictness=resolved_policy.strictness,
+        policy_profile=resolved_policy.profile.value,
+        policy_sources=resolved_policy.source_map(),
     )
 
     if exit_code == 1:
@@ -143,8 +166,12 @@ def review(
     metadata = json.loads(metadata_path.read_text()) if metadata_path.exists() else {}
     findings = findings_data.get("findings", [])
     strictness_info = metadata.get("strictness", {})
+    policy_info = metadata.get("policy", {})
     suppressed_count = int(strictness_info.get("suppressed_finding_count", 0))
-    active_strictness = strictness_info.get("level", strictness.value)
+    active_strictness = strictness_info.get("level", resolved_policy.strictness)
+    active_min_severity = metadata.get("gate", {}).get("min_severity", resolved_policy.min_severity)
+    active_fail_threshold = metadata.get("gate", {}).get("fail_on_severity", resolved_policy.fail_on_severity)
+    active_policy_profile = policy_info.get("profile", resolved_policy.profile.value)
 
     by_sev: dict[str, int] = {"CRITICAL": 0, "HIGH": 0, "MEDIUM": 0, "LOW": 0}
     for f in findings:
@@ -159,11 +186,11 @@ def review(
 
     displayed_findings = [
         f for f in findings
-        if meets_or_exceeds_threshold(f.get("severity", "LOW"), min_severity.value)
+        if meets_or_exceeds_threshold(f.get("severity", "LOW"), active_min_severity)
     ]
 
     table = Table(
-        title=f"Review Findings (>= {min_severity.value})",
+        title=f"Review Findings (>= {active_min_severity})",
         show_header=True,
         header_style="bold",
     )
@@ -184,7 +211,7 @@ def review(
         console.print(table)
     else:
         console.print(
-            f"[dim]No findings at or above {min_severity.value} "
+            f"[dim]No findings at or above {active_min_severity} "
             f"({len(findings)} total findings exist).[/dim]"
         )
 
@@ -193,7 +220,8 @@ def review(
     gate_failed = exit_code == 2
 
     console.print(f"\nHighest severity found: [bold]{highest_found}[/bold]")
-    console.print(f"Gate threshold: [bold]{fail_on_severity.value}[/bold]")
+    console.print(f"Policy profile: [bold]{active_policy_profile}[/bold]")
+    console.print(f"Gate threshold: [bold]{active_fail_threshold}[/bold]")
     console.print(f"Rule strictness: [bold]{active_strictness}[/bold]")
     if suppressed_count:
         console.print(f"Strictness-suppressed findings: [bold]{suppressed_count}[/bold]")

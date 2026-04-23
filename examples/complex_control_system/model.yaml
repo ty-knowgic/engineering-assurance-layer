@@ -1,0 +1,81 @@
+entities:
+  - name: reactor_core
+    description: thermal process vessel
+  - name: coolant_loop
+    description: closed-loop cooling subsystem
+
+signals:
+  - name: pressure_bar
+    kind: sensor
+    unit: bar
+    bounds:
+      min: 6.0
+      max: 12.0
+  - name: coolant_flow_lps
+    kind: sensor
+    unit: lps
+    bounds:
+      min: 0.0
+      max: 8.0
+  - name: heater_power_kw
+    kind: actuator
+    unit: kw
+    bounds:
+      min: 0.0
+      max: 40.0
+  - name: reactor_temperature_c
+    kind: sensor
+    unit: c
+    bounds:
+      min: 20.0
+      max: 500.0
+  - name: e_stop_active
+    kind: sensor
+    unit: bool
+    bounds:
+      min: 0
+      max: 1
+
+states:
+  - name: IDLE
+  - name: WARMUP
+  - name: REACTION
+  - name: SAFE_STOP
+  - name: FAULT
+
+modes:
+  - name: NORMAL
+  - name: CALIBRATION
+  - name: MAINTENANCE
+  - name: EMERGENCY
+
+transitions:
+  - from: IDLE
+    to: WARMUP
+    guard: "start_command == true"
+  - from: WARMUP
+    to: REACTION
+    guard: "temperature_ready == true"
+  - from: REACTION
+    to: SAFE_STOP
+    guard: "e_stop_active == true"
+  - from: SAFE_STOP
+    to: IDLE
+    guard: "fault_cleared == true"
+
+parameters:
+  estop_response_ms: 120
+  reaction_loop_ms: 50
+
+mode_constraints:
+  - id: MCON-001
+    mode: CALIBRATION
+    signal: pressure_bar
+    operator: <=
+    value: 5.0
+  - id: MCON-002
+    mode: MAINTENANCE
+    signal: heater_power_kw
+    operator: <=
+    value: 20.0
+
