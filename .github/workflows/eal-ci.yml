@@ -39,8 +39,18 @@ jobs:
             --policy-profile "${EAL_POLICY_PROFILE}" \
             --out out/ci_smoke_review
 
+      - name: Check SARIF availability
+        id: sarif_check
+        if: ${{ always() && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false) }}
+        run: |
+          if [ -f out/ci_smoke_review/results.sarif ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Publish EAL SARIF to GitHub code scanning
-        if: ${{ always() && hashFiles('out/ci_smoke_review/results.sarif') != '' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.fork == false) }}
+        if: ${{ steps.sarif_check.outputs.exists == 'true' }}
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: out/ci_smoke_review/results.sarif
