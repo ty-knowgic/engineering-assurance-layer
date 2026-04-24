@@ -83,6 +83,12 @@ def review(
         help="Path to the YAML model file (optional)",
         exists=True, file_okay=True, dir_okay=False,
     ),
+    bt_xml: Optional[Path] = typer.Option(
+        None,
+        "--bt-xml",
+        help="Path to a narrow BehaviorTree XML artifact (optional)",
+        exists=True, file_okay=True, dir_okay=False,
+    ),
     code: Optional[list[Path]] = typer.Option(
         None,
         "--code", "-c",
@@ -129,6 +135,7 @@ def review(
     console.rule("[bold blue]Engineering Assurance Layer[/bold blue]")
     console.print(f"  Spec:  [cyan]{spec}[/cyan]")
     console.print(f"  Model: [cyan]{model or '(none)'}[/cyan]")
+    console.print(f"  BT XML: [cyan]{bt_xml or '(none)'}[/cyan]")
     if code_paths:
         for cp in code_paths:
             console.print(f"  Code:  [cyan]{cp}[/cyan]")
@@ -146,6 +153,7 @@ def review(
         model_path=model,
         code_paths=code_paths,
         out_dir=out,
+        bt_xml_path=bt_xml,
         fail_on_severity=resolved_policy.fail_on_severity,
         min_severity=resolved_policy.min_severity,
         strictness=resolved_policy.strictness,

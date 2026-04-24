@@ -11,8 +11,8 @@ from __future__ import annotations
 from eal.ingestion.loaders import ModelDocument
 from eal.extraction.spec_extractor import _link_requirements_to_ir
 from eal.ir.schema import (
-    Bounds, Constraint, ConstraintScopeType, ConstraintType, Entity, IRSnapshot,
-    Mode, Signal, SignalKind, SourceRef, State, Transition,
+    Assumption, AssumptionType, Bounds, Constraint, ConstraintScopeType, ConstraintType,
+    Entity, IRSnapshot, Mode, Signal, SignalKind, SourceRef, State, Transition,
 )
 
 
@@ -168,6 +168,33 @@ def merge_model_into_ir(ir: IRSnapshot, model: ModelDocument) -> IRSnapshot:
                 source_ref=_src(model, "invariants"),
             ))
             existing_con_ids.add(cid)
+
+    # ── Assumptions ──────────────────────────────────────────────────────────
+    existing_assumption_texts = {a.text for a in ir.assumptions}
+    for i, entry in enumerate(data.get("assumptions", []), start=1):
+        if isinstance(entry, str):
+            aid = f"ASM-MODEL-{i:03d}"
+            text = entry
+            type_raw = "unclassified"
+        elif isinstance(entry, dict):
+            aid = str(entry.get("id") or f"ASM-MODEL-{i:03d}")
+            text = str(entry.get("text") or "")
+            type_raw = str(entry.get("type") or "unclassified")
+        else:
+            continue
+        if not text or text in existing_assumption_texts:
+            continue
+        try:
+            assumption_type = AssumptionType(type_raw)
+        except ValueError:
+            assumption_type = AssumptionType.UNCLASSIFIED
+        ir.assumptions.append(Assumption(
+            id=aid,
+            text=text,
+            assumption_type=assumption_type,
+            source_ref=_src(model, "assumptions"),
+        ))
+        existing_assumption_texts.add(text)
 
     # ── Mode-scoped constraints (optional) ───────────────────────────────────
     for i, entry in enumerate(data.get("mode_constraints", []), start=1):

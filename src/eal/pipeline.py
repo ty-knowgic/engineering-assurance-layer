@@ -23,7 +23,7 @@ from eal.artifacts import write_artifacts
 from eal.code_analysis import analyze_python_code_files
 from eal.extraction import extract_ir_from_spec, merge_model_into_ir
 from eal.findings.schema import assign_ids, highest_severity, meets_or_exceeds_threshold
-from eal.ingestion import load_code_files, load_model, load_spec
+from eal.ingestion import load_bt_xml_model, load_code_files, load_model, load_spec
 from eal.rules import RuleStrictness, run_rules_detailed
 from eal.solver import run_z3_checks
 
@@ -42,6 +42,7 @@ def run_review(
     model_path: Optional[Path],
     code_paths: list[Path],
     out_dir: Path,
+    bt_xml_path: Optional[Path] = None,
     fail_on_severity: str = "NONE",
     min_severity: str = "LOW",
     strictness: str = "balanced",
@@ -64,6 +65,7 @@ def run_review(
         logger.info("EAL review starting")
         logger.info("  spec:  %s", spec_path)
         logger.info("  model: %s", model_path or "(none)")
+        logger.info("  bt xml: %s", bt_xml_path or "(none)")
         logger.info("  code:  %s", code_paths or "(none)")
         logger.info("  out:   %s", out_dir)
         logger.info("  gate fail-on severity: %s", fail_on_severity)
@@ -74,6 +76,7 @@ def run_review(
         # ── Stage 1: Ingest ───────────────────────────────────────────────────
         spec = load_spec(spec_path)
         model = load_model(model_path) if model_path else None
+        bt_xml_model = load_bt_xml_model(bt_xml_path) if bt_xml_path else None
         code_files = load_code_files(code_paths) if code_paths else []
         logger.info("Ingestion complete: spec=%d lines", len(spec.lines))
 
@@ -105,6 +108,17 @@ def run_review(
             logger.info(
                 "Model merged: now %d signals, %d states, %d constraints",
                 len(ir.signals), len(ir.states), len(ir.constraints),
+            )
+        if bt_xml_model:
+            merge_model_into_ir(ir, bt_xml_model)
+            unsupported = bt_xml_model.data.get("unsupported_bt_nodes", [])
+            if unsupported:
+                ir.extraction_warnings.append(
+                    "BT XML importer ignored unsupported node(s): " + ", ".join(unsupported)
+                )
+            logger.info(
+                "BT XML merged: now %d signals, %d states, %d constraints, %d assumptions",
+                len(ir.signals), len(ir.states), len(ir.constraints), len(ir.assumptions),
             )
 
         # ── Stage 4: Deterministic rules ──────────────────────────────────────

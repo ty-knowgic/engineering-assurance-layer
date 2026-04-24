@@ -33,8 +33,8 @@ For each family, the review also inspected:
   baseline `spec.md` / `model.yaml`, timing-drift `controller.py`,
   and all three `analysis_note.md` files
 - BehaviorTree:
-  baseline and guard-gap `spec.md` / `model.yaml`,
-  illustrative `tree.xml`, and both `analysis_note.md` files
+  baseline `spec.md` / native `tree.xml`, guard-gap `spec.md` / `model.yaml`,
+  and both `analysis_note.md` files
 - ros2_control:
   baseline and interface-gap `spec.md` / `model.yaml`,
   illustrative `controller.yaml`, and both `analysis_note.md` files
@@ -46,7 +46,7 @@ PYTHONPATH=src .venv/bin/python -m eal.cli review --spec examples/smacc2_atomic_
 PYTHONPATH=src .venv/bin/python -m eal.cli review --spec examples/smacc2_atomic_mode_states_timing_drift/spec.md --model examples/smacc2_atomic_mode_states_timing_drift/model.yaml --code examples/smacc2_atomic_mode_states_timing_drift/controller.py --fail-on-severity HIGH --out /tmp/eal_valr1_smacc2_timing
 PYTHONPATH=src .venv/bin/python -m eal.cli review --spec examples/smacc2_atomic_mode_states_assumption_gap/spec.md --model examples/smacc2_atomic_mode_states_assumption_gap/model.yaml --fail-on-severity HIGH --out /tmp/eal_valr1_smacc2_assumption
 PYTHONPATH=src .venv/bin/python -m eal.cli review --spec examples/smacc2_atomic_mode_states_transition_gap/spec.md --model examples/smacc2_atomic_mode_states_transition_gap/model.yaml --fail-on-severity HIGH --out /tmp/eal_valr1_smacc2_transition
-PYTHONPATH=src .venv/bin/python -m eal.cli review --spec examples/behaviortree_timeout_precondition/spec.md --model examples/behaviortree_timeout_precondition/model.yaml --fail-on-severity HIGH --out /tmp/eal_valr1_bt_clean
+PYTHONPATH=src .venv/bin/python -m eal.cli review --spec examples/behaviortree_timeout_precondition/spec.md --bt-xml examples/behaviortree_timeout_precondition/tree.xml --fail-on-severity HIGH --out /tmp/eal_valr1_bt_clean
 PYTHONPATH=src .venv/bin/python -m eal.cli review --spec examples/behaviortree_timeout_precondition_guard_gap/spec.md --model examples/behaviortree_timeout_precondition_guard_gap/model.yaml --fail-on-severity HIGH --out /tmp/eal_valr1_bt_guard
 PYTHONPATH=src .venv/bin/python -m eal.cli review --spec examples/ros2_control_joint_limits/spec.md --model examples/ros2_control_joint_limits/model.yaml --fail-on-severity HIGH --out /tmp/eal_valr1_ros2_clean
 PYTHONPATH=src .venv/bin/python -m eal.cli review --spec examples/ros2_control_joint_limits_interface_gap/spec.md --model examples/ros2_control_joint_limits_interface_gap/model.yaml --fail-on-severity HIGH --out /tmp/eal_valr1_ros2_gap
@@ -127,12 +127,14 @@ Beyond compile/build/test/runtime:
 
 What EAL extracted well:
 
-- The baseline extracted a usable state-style abstraction:
-  5 signals, 5 states, 4 transitions, 3 requirements, 9 constraints.
-- The timing requirement `REQ-002` linked cleanly to `TC-001` and
-  `PARAM-NAVIGATE_TIMEOUT_MS`.
-- The retry bound `REQ-003` linked cleanly to `CON-001`, a derived requirement
-  constraint, and `MCON-001`.
+- The baseline extracted a usable state-style abstraction and now also ingests
+  `tree.xml` directly for narrow BT evidence:
+  5 signals, 7 states, 4 transitions, 3 requirements, 6 constraints, and
+  6 assumptions after XML merge.
+- The timing requirement `REQ-002` linked cleanly to `TC-001` and to the
+  XML-derived `PARAM-BT_TIMEOUT_NAVIGATE_TO_POSE_MS`.
+- The retry bound `REQ-003` linked cleanly to `CON-001` and a derived
+  requirement constraint.
 - The guard-gap variant produced a clean `FORBIDDEN_UNCHECKED` finding for
   `FC-001`, with no extra noise.
 
@@ -147,8 +149,9 @@ What was weak, noisy, or absent:
 - `REQ-001` did not become a first-class linked requirement in the IR.
   It has no `requirement_classes`; it only links indirectly to `FC-001` and
   `FC-002` through shared signals.
-- The illustrative `tree.xml` is not parsed. The assurance result depends on a
-  manual EAL abstraction rather than direct BehaviorTree.CPP ingestion.
+- Native XML ingestion is intentionally narrow. It extracts condition leaves,
+  explicit `Timeout msec`, and fallback/precondition visibility, but the state
+  transition slice and retry policy are still specified manually in `spec.md`.
 - The slice demonstrates timeout-backed recovery intent only at the abstraction
   level. It does not validate decorator ordering, fallback semantics, or BT
   execution behavior.

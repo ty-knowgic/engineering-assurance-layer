@@ -18,7 +18,8 @@ def _run_review(
     tmp_path: Path,
     *,
     spec: Path,
-    model: Path,
+    model: Path | None = None,
+    bt_xml: Path | None = None,
     code: list[Path] | None = None,
     fail_on: str | None = None,
 ):
@@ -27,11 +28,13 @@ def _run_review(
         "review",
         "--spec",
         str(spec),
-        "--model",
-        str(model),
         "--out",
         str(out_dir),
     ]
+    if model:
+        args.extend(["--model", str(model)])
+    if bt_xml:
+        args.extend(["--bt-xml", str(bt_xml)])
     for code_path in code or []:
         args.extend(["--code", str(code_path)])
     if fail_on:
@@ -239,7 +242,7 @@ def test_behaviortree_timeout_precondition_clean_baseline(tmp_path):
     result, categories, metadata = _run_review(
         tmp_path,
         spec=EXAMPLES / "behaviortree_timeout_precondition" / "spec.md",
-        model=EXAMPLES / "behaviortree_timeout_precondition" / "model.yaml",
+        bt_xml=EXAMPLES / "behaviortree_timeout_precondition" / "tree.xml",
         fail_on="HIGH",
     )
     assert result.exit_code == 0, result.output

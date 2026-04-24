@@ -40,8 +40,9 @@ produces machine-readable artifacts that can feed CI gates or human review workf
 7. Applies severity-threshold CI gate behavior (`--fail-on-severity`)
 8. Supports deterministic rule strictness profiles (`--strictness relaxed|balanced|strict`)
 9. Supports built-in policy profiles for operational contexts (`--policy-profile`)
-10. Emits 10 review artifacts, including SARIF v2.1.0 output
-11. Includes a minimal GitHub Actions workflow for test + review + artifact upload
+10. Ingests a narrow BehaviorTree XML slice via `--bt-xml`
+11. Emits 10 review artifacts, including SARIF v2.1.0 output
+12. Includes a minimal GitHub Actions workflow for test + review + artifact upload
 
 ---
 
@@ -63,6 +64,7 @@ produces machine-readable artifacts that can feed CI gates or human review workf
 - Markdown extraction remains regex/section-pattern based
 - Python static analysis covers simple constants/comparisons only
 - Mode-scope extraction supports only explicit deterministic phrase patterns
+- BehaviorTree XML ingestion is a narrow review-evidence wedge, not full BT semantics
 
 ### Not Yet Implemented
 
@@ -97,6 +99,13 @@ python -m eal.cli review \
   --model examples/ci_smoke/model.yaml \
   --fail-on-severity HIGH \
   --out out/ci_smoke_review
+
+# Run the BehaviorTree-oriented slice using native tree.xml ingestion
+python -m eal.cli review \
+  --spec examples/behaviortree_timeout_precondition/spec.md \
+  --bt-xml examples/behaviortree_timeout_precondition/tree.xml \
+  --fail-on-severity HIGH \
+  --out out/behaviortree_timeout_precondition_review
 
 # CI gate examples
 # Fail only on CRITICAL findings
@@ -146,7 +155,7 @@ and rule-tuning without mixing passing and intentionally failing behavior.
 - `examples/smacc2_atomic_mode_states_transition_gap/`
   - SMACC2-oriented defect injection: forbidden transition intent declared in spec but not encoded in transition guards.
 - `examples/behaviortree_timeout_precondition/`
-  - BehaviorTree-oriented validation slice for precondition gating, timeout-backed recovery intent, and bounded retry policy.
+  - BehaviorTree-oriented validation slice for precondition gating, timeout-backed recovery intent, and bounded retry policy; the clean baseline uses native `tree.xml` ingestion.
 - `examples/behaviortree_timeout_precondition_guard_gap/`
   - BehaviorTree-oriented defect injection: spec requires `localization_ready`, but the modeled precheck omits that guard.
 - `examples/ros2_control_joint_limits/`
@@ -233,6 +242,23 @@ and `linkage_reasons` explaining why a constraint was attached.
 - `... in CALIBRATION mode`
 - `... only in NORMAL mode`
 - `... when mode = MAINTENANCE`
+
+### BehaviorTree XML
+
+`--bt-xml PATH` ingests a narrow, deterministic subset of BehaviorTree-style
+XML as additional review evidence. It currently supports:
+
+- `Sequence` and `Fallback` structure for simple branch visibility
+- `Timeout msec="N"` decorators as timing parameters
+- `Precondition` decorators with an explicit `if`, `condition`, `expression`, or `cond` attribute
+- `Action` and `Condition` leaves with `ID` or `name`
+- simple custom leaf tags with no children, recorded only as leaf evidence
+
+The importer maps condition leaves to boolean internal signals, action leaves
+to traceability states, timeout decorators to `bt_timeout_<action>_ms`
+parameters, and explicit precondition/fallback evidence to assumptions. It
+does not implement full BehaviorTree.CPP execution semantics, blackboard
+resolution, port typing, decorator ordering, or arbitrary XML node behavior.
 
 ### YAML Model
 
