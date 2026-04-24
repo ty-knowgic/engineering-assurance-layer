@@ -13,14 +13,13 @@ jobs:
     runs-on: ubuntu-latest
     env:
       EAL_POLICY_PROFILE: ci
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
 
@@ -72,14 +71,14 @@ jobs:
       - name: Publish EAL SARIF to GitHub code scanning
         if: ${{ steps.sarif_check.outputs.exists == 'true' }}
         continue-on-error: true
-        uses: github/codeql-action/upload-sarif@v3
+        uses: github/codeql-action/upload-sarif@v4
         with:
           sarif_file: out/ci_smoke_review/results.sarif
           category: eal-ci-smoke
 
       - name: Upload EAL review artifacts
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: eal-ci-review-artifacts
           path: out/ci_smoke_review
