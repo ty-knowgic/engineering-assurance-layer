@@ -27,6 +27,11 @@ def test_builtin_profile_defaults():
     assert main.min_severity == "LOW"
     assert main.strictness == "relaxed"
 
+    prod = resolve_policy(profile="prod")
+    assert prod.fail_on_severity == "HIGH"
+    assert prod.min_severity == "LOW"
+    assert prod.strictness == "relaxed"
+
     strict = resolve_policy(profile="strict")
     assert strict.fail_on_severity == "MEDIUM"
     assert strict.min_severity == "LOW"
@@ -47,4 +52,3 @@ def test_explicit_overrides_profile_defaults():
     assert resolved.fail_on_source == "explicit_flag"
     assert resolved.min_severity_source == "explicit_flag"
     assert resolved.strictness_source == "explicit_flag"
-

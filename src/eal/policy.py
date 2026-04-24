@@ -16,6 +16,7 @@ class PolicyProfile(str, Enum):
     LOCAL = "local"
     CI = "ci"
     MAIN = "main"
+    PROD = "prod"
     STRICT = "strict"
 
 
@@ -63,6 +64,12 @@ _PROFILE_DEFAULTS: dict[PolicyProfile, PolicyDefaults] = {
         min_severity="LOW",
         strictness="relaxed",
         description="Main branch gating with reduced heuristic noise.",
+    ),
+    PolicyProfile.PROD: PolicyDefaults(
+        fail_on_severity="HIGH",
+        min_severity="LOW",
+        strictness="relaxed",
+        description="Production-style gating alias; same defaults as main.",
     ),
     PolicyProfile.STRICT: PolicyDefaults(
         fail_on_severity="MEDIUM",
@@ -112,4 +119,3 @@ def resolve_policy(
         min_severity_source="explicit_flag" if min_severity is not None else "profile_default",
         strictness_source="explicit_flag" if strictness is not None else "profile_default",
     )
-

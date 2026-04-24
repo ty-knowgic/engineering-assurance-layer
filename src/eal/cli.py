@@ -57,6 +57,7 @@ class PolicyProfileOption(str, Enum):
     LOCAL = "local"
     CI = "ci"
     MAIN = "main"
+    PROD = "prod"
     STRICT = "strict"
 
 

@@ -475,11 +475,30 @@ def test_review_invalid_policy_profile_rejected(tmp_path):
         "review",
         "--spec", str(EXAMPLES / "robotics_arm" / "spec.md"),
         "--model", str(EXAMPLES / "robotics_arm" / "model.yaml"),
-        "--policy-profile", "prod",
+        "--policy-profile", "staging",
         "--out", str(tmp_path / "out_invalid_policy_profile"),
     ])
     assert result.exit_code != 0
     assert "Invalid value for '--policy-profile'" in result.output
+
+
+def test_review_prod_policy_profile_is_accepted(tmp_path):
+    import json
+
+    out_dir = tmp_path / "out_prod_policy_profile"
+    result = runner.invoke(app, [
+        "review",
+        "--spec", str(EXAMPLES / "ci_smoke" / "spec.md"),
+        "--model", str(EXAMPLES / "ci_smoke" / "model.yaml"),
+        "--policy-profile", "prod",
+        "--out", str(out_dir),
+    ])
+    assert result.exit_code == 0, result.output
+
+    metadata = json.loads((out_dir / "run_metadata.json").read_text())
+    assert metadata["policy"]["profile"] == "prod"
+    assert metadata["gate"]["fail_on_severity"] == "HIGH"
+    assert metadata["strictness"]["level"] == "relaxed"
 
 
 def test_review_sarif_contains_code_mismatch_rule(tmp_path):
