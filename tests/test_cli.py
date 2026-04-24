@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 from typer.testing import CliRunner
@@ -10,6 +11,12 @@ from eal.cli import app
 
 runner = CliRunner()
 EXAMPLES = Path(__file__).parent.parent / "examples"
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _plain_output(text: str) -> str:
+    """Strip ANSI styling so CLI assertions stay stable across runners."""
+    return _ANSI_RE.sub("", text)
 
 
 def test_review_robotics_arm(tmp_path):
@@ -443,7 +450,7 @@ def test_review_invalid_fail_on_severity_rejected(tmp_path):
         "--out", str(tmp_path / "out_invalid"),
     ])
     assert result.exit_code != 0
-    assert "Invalid value for '--fail-on-severity'" in result.output
+    assert "Invalid value for '--fail-on-severity'" in _plain_output(result.output)
 
 
 def test_review_invalid_min_severity_rejected(tmp_path):
@@ -455,7 +462,7 @@ def test_review_invalid_min_severity_rejected(tmp_path):
         "--out", str(tmp_path / "out_invalid_min"),
     ])
     assert result.exit_code != 0
-    assert "Invalid value for '--min-severity'" in result.output
+    assert "Invalid value for '--min-severity'" in _plain_output(result.output)
 
 
 def test_review_invalid_strictness_rejected(tmp_path):
@@ -467,7 +474,7 @@ def test_review_invalid_strictness_rejected(tmp_path):
         "--out", str(tmp_path / "out_invalid_strictness"),
     ])
     assert result.exit_code != 0
-    assert "Invalid value for '--strictness'" in result.output
+    assert "Invalid value for '--strictness'" in _plain_output(result.output)
 
 
 def test_review_invalid_policy_profile_rejected(tmp_path):
@@ -479,7 +486,7 @@ def test_review_invalid_policy_profile_rejected(tmp_path):
         "--out", str(tmp_path / "out_invalid_policy_profile"),
     ])
     assert result.exit_code != 0
-    assert "Invalid value for '--policy-profile'" in result.output
+    assert "Invalid value for '--policy-profile'" in _plain_output(result.output)
 
 
 def test_review_prod_policy_profile_is_accepted(tmp_path):
