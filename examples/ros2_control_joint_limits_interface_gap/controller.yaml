@@ -1,0 +1,20 @@
+controller_manager:
+  ros__parameters:
+    update_rate: 100
+    arm_position_controller:
+      type: joint_trajectory_controller/JointTrajectoryController
+
+arm_position_controller:
+  ros__parameters:
+    joints:
+      - shoulder_joint
+      - elbow_joint
+    command_interfaces:
+      - position
+    state_interfaces:
+      - position
+    constraints:
+      cmd_timeout: 0.05
+    safety:
+      max_shoulder_position_rad: 1.2
+      hardware_error_reaction_ms: 20

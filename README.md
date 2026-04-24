@@ -149,6 +149,10 @@ and rule-tuning without mixing passing and intentionally failing behavior.
   - BehaviorTree-oriented validation slice for precondition gating, timeout-backed recovery intent, and bounded retry policy.
 - `examples/behaviortree_timeout_precondition_guard_gap/`
   - BehaviorTree-oriented defect injection: spec requires `localization_ready`, but the modeled precheck omits that guard.
+- `examples/ros2_control_joint_limits/`
+  - ros2_control-oriented validation slice for activation interface expectations, joint command limits, and bounded error handling.
+- `examples/ros2_control_joint_limits_interface_gap/`
+  - ros2_control-oriented defect injection: spec requires velocity feedback readiness, but the modeled activation guard omits it.
 - `examples/mobile_robot/`
   - Broader mixed scenario with timing/forbidden-condition coverage.
 

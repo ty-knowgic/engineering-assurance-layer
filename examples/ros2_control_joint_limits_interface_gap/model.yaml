@@ -1,0 +1,99 @@
+entities:
+  - name: arm_position_controller
+    description: ros2_control-style joint position controller
+  - name: shoulder_joint_hw
+    description: hardware interface for shoulder_joint
+  - name: elbow_joint_hw
+    description: hardware interface for elbow_joint
+
+signals:
+  - name: interfaces_claimed
+    kind: internal
+    unit: bool
+    bounds:
+      min: 0
+      max: 1
+  - name: lifecycle_active
+    kind: internal
+    unit: bool
+    bounds:
+      min: 0
+      max: 1
+  - name: shoulder_position_state_ready
+    kind: internal
+    unit: bool
+    bounds:
+      min: 0
+      max: 1
+  - name: shoulder_velocity_state_ready
+    kind: internal
+    unit: bool
+    bounds:
+      min: 0
+      max: 1
+  - name: shoulder_position_command_rad
+    kind: actuator
+    unit: rad
+    bounds:
+      min: -1.2
+      max: 1.2
+  - name: command_timeout
+    kind: internal
+    unit: bool
+    bounds:
+      min: 0
+      max: 1
+  - name: hardware_error
+    kind: internal
+    unit: bool
+    bounds:
+      min: 0
+      max: 1
+  - name: reset_ack
+    kind: internal
+    unit: bool
+    bounds:
+      min: 0
+      max: 1
+
+states:
+  - name: UNCONFIGURED
+  - name: INACTIVE
+  - name: ACTIVE
+  - name: ERROR
+
+modes:
+  - name: NOMINAL
+    description: controller is serving commanded joint positions
+
+transitions:
+  - from: UNCONFIGURED
+    to: INACTIVE
+    guard: "interfaces_claimed == true"
+  - from: INACTIVE
+    to: ACTIVE
+    guard: "lifecycle_active == true and shoulder_position_state_ready == true"
+  - from: ACTIVE
+    to: INACTIVE
+    guard: "command_timeout == true"
+  - from: ACTIVE
+    to: ERROR
+    guard: "hardware_error == true"
+  - from: ERROR
+    to: INACTIVE
+    guard: "reset_ack == true and lifecycle_active == true"
+
+parameters:
+  max_shoulder_position_command_rad: 1.2
+  hardware_error_reaction_ms: 20
+  command_timeout_ms: 50
+
+invariants:
+  - "shoulder_position_command_rad <= 1.2 at all times"
+
+mode_constraints:
+  - id: MCON-001
+    mode: NOMINAL
+    signal: shoulder_position_command_rad
+    operator: <=
+    value: 1.2

@@ -253,6 +253,42 @@
           "UNDEFINED_REFERENCE"
         ]
       }
+    },
+    {
+      "name": "ros2_control_joint_limits",
+      "role": "validation_testbed_ros2_control_joint_limits_clean",
+      "spec": "examples/ros2_control_joint_limits/spec.md",
+      "model": "examples/ros2_control_joint_limits/model.yaml",
+      "code": [],
+      "expected": {
+        "gate_high_passes": true,
+        "must_not_include_categories": [
+          "FORBIDDEN_UNCHECKED",
+          "TIMING_GAP",
+          "TRANSITION_GAP",
+          "UNDEFINED_REFERENCE",
+          "GLOBAL_CONSTRAINT_CONFLICT",
+          "MODE_SCOPED_CONFLICT",
+          "UNSAT_IN_MODE"
+        ]
+      }
+    },
+    {
+      "name": "ros2_control_joint_limits_interface_gap",
+      "role": "validation_testbed_ros2_control_interface_gap",
+      "spec": "examples/ros2_control_joint_limits_interface_gap/spec.md",
+      "model": "examples/ros2_control_joint_limits_interface_gap/model.yaml",
+      "code": [],
+      "expected": {
+        "gate_high_passes": false,
+        "must_include_categories": [
+          "FORBIDDEN_UNCHECKED"
+        ],
+        "must_not_include_categories": [
+          "TRANSITION_GAP",
+          "UNDEFINED_REFERENCE"
+        ]
+      }
     }
   ]
 }

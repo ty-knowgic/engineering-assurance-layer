@@ -263,3 +263,33 @@ def test_behaviortree_timeout_precondition_guard_gap_detects_forbidden_unchecked
     assert "TRANSITION_GAP" not in categories
     assert "UNDEFINED_REFERENCE" not in categories
     assert metadata["gate"]["failed"] is True
+
+
+def test_ros2_control_joint_limits_clean_baseline(tmp_path):
+    result, categories, metadata = _run_review(
+        tmp_path,
+        spec=EXAMPLES / "ros2_control_joint_limits" / "spec.md",
+        model=EXAMPLES / "ros2_control_joint_limits" / "model.yaml",
+        fail_on="HIGH",
+    )
+    assert result.exit_code == 0, result.output
+    assert "FORBIDDEN_UNCHECKED" not in categories
+    assert "TIMING_GAP" not in categories
+    assert "TRANSITION_GAP" not in categories
+    assert "UNDEFINED_REFERENCE" not in categories
+    assert metadata["gate"]["failed"] is False
+
+
+def test_ros2_control_joint_limits_interface_gap_detects_forbidden_unchecked(tmp_path):
+    result, categories, metadata = _run_review(
+        tmp_path,
+        spec=EXAMPLES / "ros2_control_joint_limits_interface_gap" / "spec.md",
+        model=EXAMPLES / "ros2_control_joint_limits_interface_gap" / "model.yaml",
+        fail_on="HIGH",
+    )
+    assert result.exit_code == 2, result.output
+    assert "FORBIDDEN_UNCHECKED" in categories
+    assert "TIMING_GAP" not in categories
+    assert "TRANSITION_GAP" not in categories
+    assert "UNDEFINED_REFERENCE" not in categories
+    assert metadata["gate"]["failed"] is True

@@ -18,6 +18,8 @@ This document describes the purpose of each example fixture in `examples/`.
 | `smacc2_atomic_mode_states_transition_gap` | Validation testbed: SMACC2 transition guard gap injection | Detects transition-intent drift (`FORBIDDEN_UNCHECKED`) when a forbidden mode switch condition is declared but not encoded in transition guards | `python -m eal.cli review --spec examples/smacc2_atomic_mode_states_transition_gap/spec.md --model examples/smacc2_atomic_mode_states_transition_gap/model.yaml --fail-on-severity HIGH --out out/smacc2_atomic_mode_states_transition_gap_review` |
 | `behaviortree_timeout_precondition` | Validation testbed: BehaviorTree-oriented timeout/precondition slice | Clean BT-inspired review slice with preconditions, timeout-backed recovery, and bounded retry policy; intended for review artifact quality, not BT correctness proof | `python -m eal.cli review --spec examples/behaviortree_timeout_precondition/spec.md --model examples/behaviortree_timeout_precondition/model.yaml --fail-on-severity HIGH --out out/behaviortree_timeout_precondition_review` |
 | `behaviortree_timeout_precondition_guard_gap` | Validation testbed: BehaviorTree-oriented guard drift injection | Detects guard/precondition drift (`FORBIDDEN_UNCHECKED`) when `localization_ready` is required in spec but omitted from the modeled precheck | `python -m eal.cli review --spec examples/behaviortree_timeout_precondition_guard_gap/spec.md --model examples/behaviortree_timeout_precondition_guard_gap/model.yaml --fail-on-severity HIGH --out out/behaviortree_timeout_precondition_guard_gap_review` |
+| `ros2_control_joint_limits` | Validation testbed: ros2_control-oriented controller/interface slice | Clean controller review slice with activation preconditions, joint command limits, and bounded error reaction; intended for review artifact quality, not controller correctness proof | `python -m eal.cli review --spec examples/ros2_control_joint_limits/spec.md --model examples/ros2_control_joint_limits/model.yaml --fail-on-severity HIGH --out out/ros2_control_joint_limits_review` |
+| `ros2_control_joint_limits_interface_gap` | Validation testbed: ros2_control-oriented interface guard drift injection | Detects interface/guard drift (`FORBIDDEN_UNCHECKED`) when `velocity` feedback readiness is required in spec but omitted from the modeled activation guard | `python -m eal.cli review --spec examples/ros2_control_joint_limits_interface_gap/spec.md --model examples/ros2_control_joint_limits_interface_gap/model.yaml --fail-on-severity HIGH --out out/ros2_control_joint_limits_interface_gap_review` |
 
 Machine-readable expectations for these examples are in `examples/manifest.json`.
 
@@ -25,7 +27,8 @@ Machine-readable expectations for these examples are in `examples/manifest.json`
 
 `complex_control_system`, `system_interlock_demo`, `subsystem_interface_review`,
 `smacc2_atomic_mode_states`, the SMACC2 defect variants, and the
-BehaviorTree-oriented timeout/precondition slice are
+BehaviorTree-oriented timeout/precondition slice, and the ros2_control-oriented
+joint-limits slice are
 validation-oriented testbeds.
 
 They are intentionally richer than smoke fixtures and are used to probe EAL's practical assurance envelope:
@@ -44,9 +47,20 @@ For the BehaviorTree-oriented slice:
 - `examples/behaviortree_timeout_precondition/analysis_note.md` for the clean baseline
 - `examples/behaviortree_timeout_precondition_guard_gap/analysis_note.md` for guard-gap injection
 
+For the ros2_control-oriented slice:
+
+- `examples/ros2_control_joint_limits/analysis_note.md` for the clean baseline
+- `examples/ros2_control_joint_limits_interface_gap/analysis_note.md` for interface-gap injection
+
 These BT-oriented fixtures are intentionally narrow. They test whether EAL can
 produce useful spec/model review artifacts around preconditions, timeout-backed
 fallback intent, and guard drift. They do not claim full BehaviorTree.CPP
 semantic understanding or runtime verification.
+
+The ros2_control-oriented fixtures are similarly narrow. They test whether EAL
+can produce useful review artifacts around controller activation preconditions,
+state-interface expectations, joint command limits, and lifecycle/error-handling
+intent. They do not claim full ros2_control semantic understanding, runtime
+controller verification, or hardware-in-the-loop coverage.
 
 Use these fixtures to benchmark practical review value and false-positive behavior as rules evolve.
