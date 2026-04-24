@@ -68,6 +68,12 @@ class CodeSymbolClass(str, Enum):
     GENERIC_NUMERIC_CONSTANT = "generic_numeric_constant"
 
 
+class RequirementLinkClass(str, Enum):
+    TIMING = "timing"
+    MODE_SCOPED = "mode_scoped"
+    SIGNAL_BOUND = "signal_bound"
+
+
 # ── Core IR nodes ─────────────────────────────────────────────────────────────
 
 class Bounds(BaseModel):
@@ -133,7 +139,9 @@ class Requirement(BaseModel):
     parsed_signals: list[str] = Field(default_factory=list)
     parsed_states: list[str] = Field(default_factory=list)
     parsed_modes: list[str] = Field(default_factory=list)
+    requirement_classes: list[RequirementLinkClass] = Field(default_factory=list)
     parsed_constraints: list[str] = Field(default_factory=list)  # constraint IDs
+    linkage_reasons: dict[str, list[str]] = Field(default_factory=dict)
     source_ref: Optional[SourceRef] = None
 
 

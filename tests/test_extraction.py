@@ -6,9 +6,11 @@ from pathlib import Path
 
 import pytest
 
+from eal.extraction import merge_model_into_ir
 from eal.ingestion.loaders import load_spec
 from eal.extraction.spec_extractor import extract_ir_from_spec
-from eal.ir.schema import ConstraintScopeType, ConstraintType, SignalKind
+from eal.ingestion import load_model
+from eal.ir.schema import ConstraintScopeType, ConstraintType, RequirementLinkClass, SignalKind
 
 
 # ── Signal extraction ─────────────────────────────────────────────────────────
@@ -189,6 +191,133 @@ def test_requirement_derived_mode_scoped_constraint(tmp_path):
     assert con.related_signals == ["joint_speed"]
     assert con.operator == "<="
     assert con.numeric_value == 1.2
+
+
+def test_requirement_linkage_prefers_timing_constraints(tmp_path):
+    spec = load_spec(_write_spec(tmp_path, """
+## Signals
+
+- mode_request: internal, bool, bounds=[0, 1]
+
+## States
+
+- StModeA: source state
+- StModeB: target state
+
+## Requirements
+
+- REQ-001: Transition StModeA -> StModeB shall complete within 100 ms of mode_request activation.
+
+## Safety Constraints
+
+- CON-001: mode_request <= 1
+
+## Timing Constraints
+
+- TC-001: StModeA -> StModeB within 100 ms of mode_request activation
+"""))
+    ir = extract_ir_from_spec(spec)
+
+    req = ir.requirements[0]
+    assert RequirementLinkClass.TIMING in req.requirement_classes
+    assert req.parsed_constraints == ["TC-001"]
+    assert "matching timing limit 100 ms" in req.linkage_reasons["TC-001"]
+    assert "CON-001" not in req.parsed_constraints
+
+
+def test_requirement_linkage_prefers_matching_mode_constraints_after_model_merge(tmp_path):
+    spec = load_spec(_write_spec(tmp_path, """
+## Modes
+
+- MODE_A: first mode
+- MODE_B: second mode
+
+## Signals
+
+- mode_request: internal, bool, bounds=[0, 1]
+
+## Requirements
+
+- REQ-001: mode_request must remain <= 1 in MODE_A mode.
+
+## Safety Constraints
+
+- CON-001: mode_request <= 1 when mode = MODE_A
+- CON-002: mode_request <= 1 when mode = MODE_B
+"""))
+    ir = extract_ir_from_spec(spec)
+
+    model_path = tmp_path / "model.yaml"
+    model_path.write_text(
+        "parameters:\n"
+        "  max_mode_request: 1\n"
+        "mode_constraints:\n"
+        "  - id: MCON-001\n"
+        "    mode: MODE_A\n"
+        "    signal: mode_request\n"
+        "    operator: <=\n"
+        "    value: 1\n"
+        "  - id: MCON-002\n"
+        "    mode: MODE_B\n"
+        "    signal: mode_request\n"
+        "    operator: <=\n"
+        "    value: 1\n"
+    )
+    merge_model_into_ir(ir, load_model(model_path))
+
+    req = ir.requirements[0]
+    assert RequirementLinkClass.MODE_SCOPED in req.requirement_classes
+    assert set(req.parsed_constraints) == {"CON-001", "MCON-001", "REQC-REQ-001-01"}
+    assert "CON-002" not in req.parsed_constraints
+    assert "MCON-002" not in req.parsed_constraints
+    assert "PARAM-MAX_MODE_REQUEST" not in req.parsed_constraints
+
+
+def test_requirement_linkage_signal_threshold_excludes_unrelated_constraints(tmp_path):
+    spec = load_spec(_write_spec(tmp_path, """
+## Signals
+
+- pressure_bar: sensor, bar, bounds=[0, 5]
+- temperature_c: sensor, C, bounds=[0, 200]
+
+## Requirements
+
+- REQ-001: pressure_bar must remain <= 2.0 bar.
+
+## Safety Constraints
+
+- CON-001: pressure_bar <= 2.0 bar
+- CON-002: temperature_c <= 80 C
+"""))
+    ir = extract_ir_from_spec(spec)
+
+    req = ir.requirements[0]
+    assert RequirementLinkClass.SIGNAL_BOUND in req.requirement_classes
+    assert set(req.parsed_constraints) == {"CON-001", "REQC-REQ-001-01"}
+    assert "CON-002" not in req.parsed_constraints
+
+
+def test_smacc2_requirement_linkage_is_narrower_after_model_merge(tmp_path):
+    root = Path(__file__).parent.parent
+    spec = load_spec(root / "examples" / "smacc2_atomic_mode_states" / "spec.md")
+    ir = extract_ir_from_spec(spec)
+    merge_model_into_ir(ir, load_model(root / "examples" / "smacc2_atomic_mode_states" / "model.yaml"))
+
+    req_by_id = {req.id: req for req in ir.requirements}
+
+    req_mode_a = req_by_id["REQ-001"]
+    assert {"CON-001", "MCON-001", "REQC-REQ-001-01"} <= set(req_mode_a.parsed_constraints)
+    assert "CON-002" not in req_mode_a.parsed_constraints
+    assert "FC-001" not in req_mode_a.parsed_constraints
+    assert "MCON-002" not in req_mode_a.parsed_constraints
+    assert "TC-001" not in req_mode_a.parsed_constraints
+    assert "REQC-REQ-002-01" not in req_mode_a.parsed_constraints
+
+    req_timing = req_by_id["REQ-003"]
+    assert RequirementLinkClass.TIMING in req_timing.requirement_classes
+    assert {"TC-001", "PARAM-MODE_SWITCH_RESPONSE_MS"} <= set(req_timing.parsed_constraints)
+    assert "CON-001" not in req_timing.parsed_constraints
+    assert "REQC-REQ-001-01" not in req_timing.parsed_constraints
 
 
 # ── Transition extraction ─────────────────────────────────────────────────────

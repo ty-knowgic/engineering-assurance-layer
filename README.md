@@ -10,6 +10,8 @@ It is not a theorem prover. It is not an AI assistant. It is a deterministic
 review pipeline that helps engineering teams decide whether a specification is
 internally consistent, has declared its assumptions, and is ready for review.
 
+Project positioning and strategic boundaries: [docs/positioning.md](docs/positioning.md).
+
 ---
 
 ## What Problem It Solves
@@ -137,6 +139,16 @@ and rule-tuning without mixing passing and intentionally failing behavior.
   - Validation testbed for subsystem boundary/interface consistency across modes and timing expectations.
 - `examples/smacc2_atomic_mode_states/`
   - Real-world validation slice based on SMACC2 `sm_atomic_mode_states` concepts; intentionally modeled as a clean assurance baseline.
+- `examples/smacc2_atomic_mode_states_timing_drift/`
+  - SMACC2-oriented defect injection: code timing constant drifts above declared mode-switch timing budget.
+- `examples/smacc2_atomic_mode_states_assumption_gap/`
+  - SMACC2-oriented defect injection: safety-relevant e-stop declarations without supporting reliability assumption.
+- `examples/smacc2_atomic_mode_states_transition_gap/`
+  - SMACC2-oriented defect injection: forbidden transition intent declared in spec but not encoded in transition guards.
+- `examples/behaviortree_timeout_precondition/`
+  - BehaviorTree-oriented validation slice for precondition gating, timeout-backed recovery intent, and bounded retry policy.
+- `examples/behaviortree_timeout_precondition_guard_gap/`
+  - BehaviorTree-oriented defect injection: spec requires `localization_ready`, but the modeled precheck omits that guard.
 - `examples/mobile_robot/`
   - Broader mixed scenario with timing/forbidden-condition coverage.
 
@@ -196,6 +208,10 @@ more you include, the more checks EAL can perform.
 - `bounds` is optional but required for Z3 checks
 
 **Requirement format:** `- REQ-NNN: requirement text`
+
+Requirement linkage in `ir_snapshot.json` is selective and inspectable:
+each requirement records `requirement_classes`, linked `parsed_constraints`,
+and `linkage_reasons` explaining why a constraint was attached.
 
 **Constraint formats:**
 - Safety Constraints: `- CON-NNN: expression`
@@ -305,7 +321,7 @@ even if empty (explicit status markers prevent silent omissions).
 | `missing_assumptions.md` | MISSING_ASSUMPTION findings with suggested fixes |
 | `counterexamples.json` | Machine-readable counterexample structures from Z3 and rule checks |
 | `review_evidence.json` | Run provenance: inputs, IR summary, git info, timestamp |
-| `ir_snapshot.json` | Full IR dump (all extracted signals, states, requirements, constraints) |
+| `ir_snapshot.json` | Full IR dump, including selective requirement linkage metadata (`requirement_classes`, `parsed_constraints`, `linkage_reasons`) |
 | `findings.json` | All findings in stable schema (id, severity, category, title, summary, fix) |
 | `results.sarif` | SARIF v2.1.0 transform of canonical findings for IDE/CI ingestion |
 | `report.html` | Simple HTML report with sortable findings table |
@@ -387,7 +403,7 @@ It runs on `push` and `pull_request` and executes:
 2. `pytest`
 3. `python -m eal.cli review` against `examples/ci_smoke` with
    `--policy-profile ci`
-4. publishes `out/ci_smoke_review/results.sarif` to GitHub code scanning
+4. attempts to publish `out/ci_smoke_review/results.sarif` to GitHub code scanning
 
 The workflow uploads `out/ci_smoke_review` as a build artifact, which includes
 `findings.json`, `review_summary.md`, `run_metadata.json`, `results.sarif`,
@@ -402,7 +418,9 @@ avoid permanent workflow failure from intentionally failing examples.
 
 GitHub code scanning visibility depends on repository settings and token
 permissions. Upload is skipped for fork-based pull requests where
-`security-events: write` is not available.
+`security-events: write` is not available. SARIF publication is best-effort and
+does not determine CI pass/fail; the EAL smoke review gate result remains the
+authoritative signal.
 
 ---
 

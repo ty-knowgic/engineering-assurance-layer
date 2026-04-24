@@ -168,6 +168,91 @@
           "UNSAT_IN_MODE"
         ]
       }
+    },
+    {
+      "name": "smacc2_atomic_mode_states_timing_drift",
+      "role": "validation_testbed_smacc2_code_timing_drift",
+      "spec": "examples/smacc2_atomic_mode_states_timing_drift/spec.md",
+      "model": "examples/smacc2_atomic_mode_states_timing_drift/model.yaml",
+      "code": [
+        "examples/smacc2_atomic_mode_states_timing_drift/controller.py"
+      ],
+      "expected": {
+        "gate_high_passes": false,
+        "must_include_categories": [
+          "CODE_TIMING_MISMATCH"
+        ]
+      }
+    },
+    {
+      "name": "smacc2_atomic_mode_states_assumption_gap",
+      "role": "validation_testbed_smacc2_assumption_gap",
+      "spec": "examples/smacc2_atomic_mode_states_assumption_gap/spec.md",
+      "model": "examples/smacc2_atomic_mode_states_assumption_gap/model.yaml",
+      "code": [],
+      "expected": {
+        "gate_high_passes": false,
+        "must_include_categories": [
+          "MISSING_ASSUMPTION"
+        ],
+        "must_not_include_categories": [
+          "TRANSITION_GAP",
+          "UNDEFINED_REFERENCE"
+        ]
+      }
+    },
+    {
+      "name": "smacc2_atomic_mode_states_transition_gap",
+      "role": "validation_testbed_smacc2_transition_guard_gap",
+      "spec": "examples/smacc2_atomic_mode_states_transition_gap/spec.md",
+      "model": "examples/smacc2_atomic_mode_states_transition_gap/model.yaml",
+      "code": [],
+      "expected": {
+        "gate_high_passes": false,
+        "must_include_categories": [
+          "FORBIDDEN_UNCHECKED"
+        ],
+        "must_not_include_categories": [
+          "TRANSITION_GAP",
+          "UNDEFINED_REFERENCE"
+        ]
+      }
+    },
+    {
+      "name": "behaviortree_timeout_precondition",
+      "role": "validation_testbed_behavior_tree_timeout_precondition_clean",
+      "spec": "examples/behaviortree_timeout_precondition/spec.md",
+      "model": "examples/behaviortree_timeout_precondition/model.yaml",
+      "code": [],
+      "expected": {
+        "gate_high_passes": true,
+        "must_not_include_categories": [
+          "FORBIDDEN_UNCHECKED",
+          "TIMING_GAP",
+          "TRANSITION_GAP",
+          "UNDEFINED_REFERENCE",
+          "GLOBAL_CONSTRAINT_CONFLICT",
+          "MODE_SCOPED_CONFLICT",
+          "UNSAT_IN_MODE"
+        ]
+      }
+    },
+    {
+      "name": "behaviortree_timeout_precondition_guard_gap",
+      "role": "validation_testbed_behavior_tree_guard_gap",
+      "spec": "examples/behaviortree_timeout_precondition_guard_gap/spec.md",
+      "model": "examples/behaviortree_timeout_precondition_guard_gap/model.yaml",
+      "code": [],
+      "expected": {
+        "gate_high_passes": false,
+        "must_include_categories": [
+          "FORBIDDEN_UNCHECKED"
+        ],
+        "must_not_include_categories": [
+          "TRANSITION_GAP",
+          "UNDEFINED_REFERENCE"
+        ]
+      }
     }
   ]
 }

@@ -13,6 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       EAL_POLICY_PROFILE: ci
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
     steps:
       - name: Checkout
@@ -32,19 +33,36 @@ jobs:
         run: pytest
 
       - name: "Run EAL CI smoke review (policy: ci)"
+        id: review_run
+        continue-on-error: true
         run: |
+          mkdir -p out/ci_smoke_review
+          {
+            echo "event=$GITHUB_EVENT_NAME"
+            echo "policy_profile=${EAL_POLICY_PROFILE}"
+            echo "python=$(python --version 2>&1)"
+            echo "pwd=$(pwd)"
+            echo "repo_root_contents:"
+            ls -la
+            echo "examples/ci_smoke contents:"
+            ls -la examples/ci_smoke
+          } > out/ci_smoke_review/ci_debug.txt
+
           python -m eal.cli review \
             --spec examples/ci_smoke/spec.md \
             --model examples/ci_smoke/model.yaml \
             --policy-profile "${EAL_POLICY_PROFILE}" \
-            --out out/ci_smoke_review
+            --out out/ci_smoke_review \
+            >> out/ci_smoke_review/ci_debug.txt 2>&1
 
       - name: Check SARIF availability
         id: sarif_check
+        env:
+          IS_FORK_PR: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.fork || false }}
         run: |
-          if [ "$GITHUB_EVENT_NAME" = "pull_request" ]; then
+          if [ "$IS_FORK_PR" = "true" ]; then
             echo "exists=false" >> "$GITHUB_OUTPUT"
-            echo "Skipping SARIF upload on pull_request events"
+            echo "Skipping SARIF upload for fork-based pull_request events"
           elif [ -f out/ci_smoke_review/results.sarif ]; then
             echo "exists=true" >> "$GITHUB_OUTPUT"
           else
@@ -52,7 +70,8 @@ jobs:
           fi
 
       - name: Publish EAL SARIF to GitHub code scanning
-        if: steps.sarif_check.outputs.exists == 'true'
+        if: ${{ steps.sarif_check.outputs.exists == 'true' }}
+        continue-on-error: true
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: out/ci_smoke_review/results.sarif
@@ -65,3 +84,9 @@ jobs:
           name: eal-ci-review-artifacts
           path: out/ci_smoke_review
           if-no-files-found: warn
+
+      - name: Fail job if EAL review failed
+        if: ${{ steps.review_run.outcome != 'success' }}
+        run: |
+          echo "EAL CI smoke review failed. See uploaded artifacts and ci_debug.txt for details."
+          exit 1

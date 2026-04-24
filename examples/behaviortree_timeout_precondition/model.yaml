@@ -1,0 +1,76 @@
+entities:
+  - name: bt_navigation_slice
+    description: Minimal behavior-tree-oriented navigation slice
+  - name: bt_runtime
+    description: Runtime enforcing timeout and fallback execution
+
+signals:
+  - name: goal_requested
+    kind: internal
+    unit: bool
+    bounds:
+      min: 0
+      max: 1
+  - name: battery_ok
+    kind: sensor
+    unit: bool
+    bounds:
+      min: 0
+      max: 1
+  - name: localization_ready
+    kind: sensor
+    unit: bool
+    bounds:
+      min: 0
+      max: 1
+  - name: navigation_timeout
+    kind: internal
+    unit: bool
+    bounds:
+      min: 0
+      max: 1
+  - name: recovery_retry_count
+    kind: internal
+    unit: count
+    bounds:
+      min: 0
+      max: 1
+
+states:
+  - name: IDLE
+  - name: PRECHECK
+  - name: NAVIGATING
+  - name: RECOVERING
+  - name: ABORTED
+
+modes:
+  - name: AUTO_NAV
+    description: Nominal autonomous navigation mode
+
+transitions:
+  - from: IDLE
+    to: PRECHECK
+    guard: "goal_requested == true"
+  - from: PRECHECK
+    to: NAVIGATING
+    guard: "battery_ok == true and localization_ready == true"
+  - from: NAVIGATING
+    to: RECOVERING
+    guard: "navigation_timeout == true"
+  - from: RECOVERING
+    to: ABORTED
+    guard: "recovery_retry_count >= 1"
+
+parameters:
+  navigate_timeout_ms: 100
+  max_recovery_retry_count: 1
+
+invariants:
+  - "recovery_retry_count <= 1 at all times"
+
+mode_constraints:
+  - id: MCON-001
+    mode: AUTO_NAV
+    signal: recovery_retry_count
+    operator: <=
+    value: 1

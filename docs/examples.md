@@ -13,17 +13,40 @@ This document describes the purpose of each example fixture in `examples/`.
 | `system_interlock_demo` | Validation testbed: interlock + structure quality | Interlock coverage gaps, undefined references/transition targets, and code threshold mismatches | `python -m eal.cli review --spec examples/system_interlock_demo/spec.md --model examples/system_interlock_demo/model.yaml --code examples/system_interlock_demo/controller.py --out out/system_interlock_demo_review` |
 | `subsystem_interface_review` | Validation testbed: subsystem boundary review | Interface-boundary declaration issues plus code threshold mismatches across modes | `python -m eal.cli review --spec examples/subsystem_interface_review/spec.md --model examples/subsystem_interface_review/model.yaml --code examples/subsystem_interface_review/controller.py --out out/subsystem_interface_review` |
 | `smacc2_atomic_mode_states` | Validation testbed: real-world SMACC2 assurance slice | Meaningful clean baseline on a minimal SMACC2-style state machine abstraction; validates structural/mode/timing consistency | `python -m eal.cli review --spec examples/smacc2_atomic_mode_states/spec.md --model examples/smacc2_atomic_mode_states/model.yaml --fail-on-severity HIGH --out out/smacc2_atomic_mode_states_review` |
+| `smacc2_atomic_mode_states_timing_drift` | Validation testbed: SMACC2 timing drift injection | Detects cross-artifact timing budget drift (`CODE_TIMING_MISMATCH`) when code constants diverge from spec/model timing limits | `python -m eal.cli review --spec examples/smacc2_atomic_mode_states_timing_drift/spec.md --model examples/smacc2_atomic_mode_states_timing_drift/model.yaml --code examples/smacc2_atomic_mode_states_timing_drift/controller.py --fail-on-severity HIGH --out out/smacc2_atomic_mode_states_timing_drift_review` |
+| `smacc2_atomic_mode_states_assumption_gap` | Validation testbed: SMACC2 assumption gap injection | Detects missing safety assumption coverage (`MISSING_ASSUMPTION`) for e-stop-related declarations | `python -m eal.cli review --spec examples/smacc2_atomic_mode_states_assumption_gap/spec.md --model examples/smacc2_atomic_mode_states_assumption_gap/model.yaml --fail-on-severity HIGH --out out/smacc2_atomic_mode_states_assumption_gap_review` |
+| `smacc2_atomic_mode_states_transition_gap` | Validation testbed: SMACC2 transition guard gap injection | Detects transition-intent drift (`FORBIDDEN_UNCHECKED`) when a forbidden mode switch condition is declared but not encoded in transition guards | `python -m eal.cli review --spec examples/smacc2_atomic_mode_states_transition_gap/spec.md --model examples/smacc2_atomic_mode_states_transition_gap/model.yaml --fail-on-severity HIGH --out out/smacc2_atomic_mode_states_transition_gap_review` |
+| `behaviortree_timeout_precondition` | Validation testbed: BehaviorTree-oriented timeout/precondition slice | Clean BT-inspired review slice with preconditions, timeout-backed recovery, and bounded retry policy; intended for review artifact quality, not BT correctness proof | `python -m eal.cli review --spec examples/behaviortree_timeout_precondition/spec.md --model examples/behaviortree_timeout_precondition/model.yaml --fail-on-severity HIGH --out out/behaviortree_timeout_precondition_review` |
+| `behaviortree_timeout_precondition_guard_gap` | Validation testbed: BehaviorTree-oriented guard drift injection | Detects guard/precondition drift (`FORBIDDEN_UNCHECKED`) when `localization_ready` is required in spec but omitted from the modeled precheck | `python -m eal.cli review --spec examples/behaviortree_timeout_precondition_guard_gap/spec.md --model examples/behaviortree_timeout_precondition_guard_gap/model.yaml --fail-on-severity HIGH --out out/behaviortree_timeout_precondition_guard_gap_review` |
 
 Machine-readable expectations for these examples are in `examples/manifest.json`.
 
 ## Validation Testbeds
 
-`complex_control_system`, `system_interlock_demo`, `subsystem_interface_review`, and `smacc2_atomic_mode_states` are validation-oriented testbeds.
+`complex_control_system`, `system_interlock_demo`, `subsystem_interface_review`,
+`smacc2_atomic_mode_states`, the SMACC2 defect variants, and the
+BehaviorTree-oriented timeout/precondition slice are
+validation-oriented testbeds.
 
 They are intentionally richer than smoke fixtures and are used to probe EAL's practical assurance envelope:
 - current strengths: deterministic structure checks, mode-scoped numeric contradictions, code/spec/model threshold mismatches
 - current limits: no full control-theory proof, no full distributed protocol verification, no temporal model checking
 
-For the SMACC2 slice specifically, see `examples/smacc2_atomic_mode_states/analysis_note.md` for source-traceability and limits framing.
+For the SMACC2 slices specifically:
+
+- `examples/smacc2_atomic_mode_states/analysis_note.md` for the clean baseline
+- `examples/smacc2_atomic_mode_states_timing_drift/analysis_note.md` for timing drift injection
+- `examples/smacc2_atomic_mode_states_assumption_gap/analysis_note.md` for assumption-gap injection
+- `examples/smacc2_atomic_mode_states_transition_gap/analysis_note.md` for transition-guard gap injection
+
+For the BehaviorTree-oriented slice:
+
+- `examples/behaviortree_timeout_precondition/analysis_note.md` for the clean baseline
+- `examples/behaviortree_timeout_precondition_guard_gap/analysis_note.md` for guard-gap injection
+
+These BT-oriented fixtures are intentionally narrow. They test whether EAL can
+produce useful spec/model review artifacts around preconditions, timeout-backed
+fallback intent, and guard drift. They do not claim full BehaviorTree.CPP
+semantic understanding or runtime verification.
 
 Use these fixtures to benchmark practical review value and false-positive behavior as rules evolve.

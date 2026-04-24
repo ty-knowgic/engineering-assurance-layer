@@ -1,0 +1,15 @@
+<root main_tree_to_execute="MainTree">
+  <BehaviorTree ID="MainTree">
+    <Fallback name="NavigateWithRecovery">
+      <Sequence name="NavigateNominal">
+        <Condition ID="GoalRequested"/>
+        <Condition ID="BatteryOk"/>
+        <Condition ID="LocalizationReady"/>
+        <Timeout msec="100">
+          <Action ID="NavigateToPose"/>
+        </Timeout>
+      </Sequence>
+      <Action ID="RecoverySpin"/>
+    </Fallback>
+  </BehaviorTree>
+</root>

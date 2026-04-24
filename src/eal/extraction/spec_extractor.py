@@ -19,13 +19,15 @@ Warnings are appended to ir.extraction_warnings.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 import re
 from typing import Optional
 
+from eal.code_analysis.matching import is_timing_name, normalize_symbol_name
 from eal.ingestion.loaders import SpecDocument
 from eal.ir.schema import (
     Assumption, AssumptionType, Bounds, Constraint, ConstraintScopeType, ConstraintType,
-    Entity, IRSnapshot, Mode, Requirement, Signal, SignalKind,
+    Entity, IRSnapshot, Mode, Requirement, RequirementLinkClass, Signal, SignalKind,
     SourceRef, State, Transition,
 )
 
@@ -64,6 +66,40 @@ _MODE_PATTERNS = (
     re.compile(r"\bin\s+([A-Za-z_][A-Za-z0-9_]*)\s+mode\b", re.IGNORECASE),
     re.compile(r"\bwhen\s+mode\s*(?:=|==)\s*([A-Za-z_][A-Za-z0-9_]*)\b", re.IGNORECASE),
 )
+_TIMING_WITHIN_RE = re.compile(
+    r"\bwithin\s+(\d+(?:\.\d+)?)\s*(ms|millisecond|milliseconds)\b",
+    re.IGNORECASE,
+)
+_TIMING_HINT_RE = re.compile(
+    r"\b(within|latency|timeout|delay|deadline|response(?:\s+time)?)\b",
+    re.IGNORECASE,
+)
+_GENERIC_LINK_TOKENS = {
+    "activation",
+    "complete",
+    "completed",
+    "mode",
+    "must",
+    "remain",
+    "shall",
+    "should",
+    "when",
+    "within",
+}
+
+
+@dataclass(frozen=True)
+class _LinkFeatures:
+    signals: frozenset[str]
+    states: frozenset[str]
+    modes: frozenset[str]
+    classes: frozenset[RequirementLinkClass]
+    operator: Optional[str]
+    numeric_value: Optional[float]
+    timing_limit_ms: Optional[float]
+    is_timing: bool
+    is_parameter: bool = False
+    parameter_name: Optional[str] = None
 
 
 def _source(spec: SpecDocument, section: str, line_idx: Optional[int] = None) -> SourceRef:
@@ -99,6 +135,256 @@ def _scope_fields(applies_in_modes: list[str]) -> tuple[ConstraintScopeType, boo
     if applies_in_modes:
         return (ConstraintScopeType.MODE, False)
     return (ConstraintScopeType.GLOBAL, True)
+
+
+def _dedupe(items: list[str]) -> list[str]:
+    return list(dict.fromkeys(items))
+
+
+def _same_number(a: Optional[float], b: Optional[float], tol: float = 1e-9) -> bool:
+    return a is not None and b is not None and abs(a - b) <= tol
+
+
+def _parse_timing_limit_ms(text: str) -> Optional[float]:
+    m = _TIMING_WITHIN_RE.search(text)
+    if not m:
+        return None
+    return float(m.group(1))
+
+
+def _has_timing_vocabulary(text: str) -> bool:
+    return _TIMING_HINT_RE.search(text) is not None
+
+
+def _normalized_variants(name: str) -> list[str]:
+    variants = [name.lower()]
+    normalized = normalize_symbol_name(name)
+    if normalized:
+        variants.append(normalized.replace("_", " "))
+    if "_" in name:
+        variants.append(name.lower().replace("_", " "))
+    return _dedupe([v for v in variants if v])
+
+
+def _text_mentions_name(text: str, name: str) -> bool:
+    for variant in _normalized_variants(name):
+        parts = variant.split()
+        if not parts:
+            continue
+        if len(parts) == 1:
+            pattern = rf"\b{re.escape(parts[0])}\b"
+        else:
+            pattern = r"\b" + r"\s+".join(re.escape(part) for part in parts) + r"\b"
+        if re.search(pattern, text, re.IGNORECASE):
+            return True
+    return False
+
+
+def _match_known_names(text: str, names: list[str]) -> list[str]:
+    matches = [name for name in names if _text_mentions_name(text, name)]
+    return _dedupe(matches)
+
+
+def _bound_compatibility_reason(
+    req_op: Optional[str],
+    req_value: Optional[float],
+    con_op: Optional[str],
+    con_value: Optional[float],
+) -> Optional[str]:
+    if req_op is None or req_value is None or con_op is None or con_value is None:
+        return None
+
+    if req_op == con_op and _same_number(req_value, con_value):
+        return f"matching bound {req_op} {req_value:g}"
+
+    upper_ops = {"<", "<="}
+    lower_ops = {">", ">="}
+    if req_op in upper_ops and con_op in upper_ops and con_value <= req_value:
+        return f"compatible upper bound {con_op} {con_value:g}"
+    if req_op in lower_ops and con_op in lower_ops and con_value >= req_value:
+        return f"compatible lower bound {con_op} {con_value:g}"
+    return None
+
+
+def _parameter_name_from_expr(expr: str) -> Optional[str]:
+    m = re.match(r"\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*=", expr)
+    return m.group(1) if m else None
+
+
+def _requirement_features(
+    req: Requirement,
+    signals: list[Signal],
+    states: list[State],
+    modes: list[Mode],
+) -> _LinkFeatures:
+    signal_names = [s.name for s in signals]
+    state_names = [s.name for s in states]
+    mode_names = [m.name for m in modes]
+    timing_signals = {s.name for s in signals if s.kind == SignalKind.TIMING}
+
+    parsed_signals = _match_known_names(req.text, signal_names)
+    parsed_states = _match_known_names(req.text, state_names)
+    parsed_modes = _match_known_names(req.text, mode_names)
+    mode_name_map = {m.name.lower(): m.name for m in modes}
+    for mode in _extract_mode_scope(req.text, mode_name_map):
+        if mode not in parsed_modes:
+            parsed_modes.append(mode)
+
+    op, value, _ = _parse_bounds_from_text(req.text)
+    timing_limit_ms = _parse_timing_limit_ms(req.text)
+    classes: list[RequirementLinkClass] = []
+
+    if timing_limit_ms is not None or _has_timing_vocabulary(req.text) or any(
+        signal in timing_signals or is_timing_name(signal)
+        for signal in parsed_signals
+    ):
+        classes.append(RequirementLinkClass.TIMING)
+    if parsed_modes:
+        classes.append(RequirementLinkClass.MODE_SCOPED)
+    if op is not None and value is not None and parsed_signals:
+        classes.append(RequirementLinkClass.SIGNAL_BOUND)
+
+    return _LinkFeatures(
+        signals=frozenset(parsed_signals),
+        states=frozenset(parsed_states),
+        modes=frozenset(parsed_modes),
+        classes=frozenset(classes),
+        operator=op,
+        numeric_value=value,
+        timing_limit_ms=timing_limit_ms,
+        is_timing=RequirementLinkClass.TIMING in classes,
+    )
+
+
+def _constraint_features(
+    con: Constraint,
+    signals: list[Signal],
+    states: list[State],
+    modes: list[Mode],
+) -> _LinkFeatures:
+    signal_names = {s.name for s in signals}
+    state_names = {s.name for s in states}
+    mode_names = {m.name for m in modes}
+    timing_signals = {s.name for s in signals if s.kind == SignalKind.TIMING}
+
+    parsed_signals = [name for name in con.related_signals if name in signal_names]
+    parsed_states = [name for name in con.related_states if name in state_names]
+    parsed_modes = [name for name in con.applies_in_modes if name in mode_names]
+
+    for name in _match_known_names(con.expression_text, sorted(signal_names)):
+        if name not in parsed_signals:
+            parsed_signals.append(name)
+    for name in _match_known_names(con.expression_text, sorted(state_names)):
+        if name not in parsed_states:
+            parsed_states.append(name)
+    for name in _match_known_names(con.expression_text, sorted(mode_names)):
+        if name not in parsed_modes:
+            parsed_modes.append(name)
+
+    parameter_name = _parameter_name_from_expr(con.expression_text)
+    timing_limit_ms = _parse_timing_limit_ms(con.expression_text)
+    is_timing = (
+        con.constraint_type == ConstraintType.TIMING
+        or timing_limit_ms is not None
+        or any(signal in timing_signals or is_timing_name(signal) for signal in parsed_signals)
+        or (parameter_name is not None and is_timing_name(parameter_name))
+    )
+
+    if timing_limit_ms is None and is_timing and con.numeric_value is not None:
+        timing_limit_ms = con.numeric_value
+
+    return _LinkFeatures(
+        signals=frozenset(parsed_signals),
+        states=frozenset(parsed_states),
+        modes=frozenset(parsed_modes),
+        classes=frozenset(),
+        operator=con.operator,
+        numeric_value=con.numeric_value,
+        timing_limit_ms=timing_limit_ms,
+        is_timing=is_timing,
+        is_parameter=parameter_name is not None,
+        parameter_name=parameter_name,
+    )
+
+
+def _link_reasons(req: Requirement, reqf: _LinkFeatures, con: Constraint, conf: _LinkFeatures) -> list[str]:
+    reasons: list[str] = []
+    derived_from_req = con.id.startswith(f"REQC-{req.id}-")
+    shared_signals = sorted(reqf.signals & conf.signals)
+    shared_states = sorted(reqf.states & conf.states)
+    shared_modes = sorted(reqf.modes & conf.modes)
+    mode_mismatch = bool(reqf.modes and conf.modes and not shared_modes)
+
+    if derived_from_req:
+        reasons.append("derived from requirement text")
+
+    if reqf.is_timing:
+        if not conf.is_timing:
+            return reasons if derived_from_req else []
+        reasons.append("timing-oriented requirement")
+
+        if reqf.modes and not conf.modes and not derived_from_req:
+            limit_match = _same_number(reqf.timing_limit_ms, conf.timing_limit_ms)
+            if not limit_match:
+                return []
+        if mode_mismatch:
+            return []
+
+        if _same_number(reqf.timing_limit_ms, conf.timing_limit_ms):
+            reasons.append(f"matching timing limit {reqf.timing_limit_ms:g} ms")
+        if shared_states:
+            reasons.append(f"shared state scope {', '.join(shared_states)}")
+        if shared_signals:
+            reasons.append(f"shared signal scope {', '.join(shared_signals)}")
+        if shared_modes:
+            reasons.append(f"matching mode scope {', '.join(shared_modes)}")
+        if conf.is_parameter and conf.parameter_name:
+            reasons.append(f"timing-related parameter {conf.parameter_name}")
+
+        strong_match = (
+            derived_from_req
+            or _same_number(reqf.timing_limit_ms, conf.timing_limit_ms)
+            or bool(shared_states)
+            or bool(shared_signals)
+            or bool(shared_modes)
+        )
+        return reasons if strong_match else []
+
+    if reqf.signals and not shared_signals:
+        return reasons if derived_from_req else []
+
+    mode_scoped = RequirementLinkClass.MODE_SCOPED in reqf.classes
+    signal_bound = RequirementLinkClass.SIGNAL_BOUND in reqf.classes
+
+    if mode_scoped:
+        if mode_mismatch:
+            return []
+        if reqf.modes and not conf.modes and not derived_from_req:
+            return []
+
+    if shared_signals:
+        reasons.append(f"shared signal {', '.join(shared_signals)}")
+    if shared_states:
+        reasons.append(f"shared state {', '.join(shared_states)}")
+    if shared_modes:
+        reasons.append(f"matching mode scope {', '.join(shared_modes)}")
+
+    compat_reason = _bound_compatibility_reason(
+        reqf.operator,
+        reqf.numeric_value,
+        conf.operator,
+        conf.numeric_value,
+    )
+    if compat_reason:
+        reasons.append(compat_reason)
+    elif signal_bound and reqf.operator is not None and reqf.numeric_value is not None and not derived_from_req:
+        return []
+
+    if signal_bound:
+        strong_match = derived_from_req or bool(shared_signals)
+        return reasons if strong_match and (compat_reason is not None or derived_from_req) else []
+
+    return reasons
 
 
 def _parse_signals(lines: list[str], spec: SpecDocument, section: str) -> list[Signal]:
@@ -262,9 +548,12 @@ def _parse_constraints(
         op, val, unit = _parse_bounds_from_text(text)
 
         # Extract signal/state/mode references by token matching
-        tokens = re.findall(r"\b([A-Z][A-Z_0-9]+|[a-z][a-z_0-9]+)\b", text)
+        tokens = re.findall(r"\b([A-Z][A-Za-z_0-9]+|[a-z][a-z_0-9]+)\b", text)
         # Heuristic: uppercase tokens tend to be states/modes, lowercase are signals
-        related_signals = [t for t in tokens if t and t[0].islower() and len(t) > 2]
+        related_signals = [
+            t for t in tokens
+            if t and t[0].islower() and len(t) > 2 and t.lower() not in _GENERIC_LINK_TOKENS
+        ]
         upper_tokens = [t for t in tokens if t and t[0].isupper() and len(t) > 2]
         mode_scope = _extract_mode_scope(text, mode_name_map)
         token_modes = [t for t in upper_tokens if t.lower() in mode_name_map]
@@ -359,35 +648,35 @@ def _link_requirements_to_ir(
     modes: list[Mode],
     constraints: list[Constraint],
 ) -> None:
-    """Back-fill parsed_signals/states/modes on requirements by token matching."""
-    signal_names = {s.name.lower(): s.name for s in signals}
-    state_names = {s.name.lower(): s.name for s in states}
-    mode_names = {m.name.lower(): m.name for m in modes}
+    """Back-fill requirement linkage fields using selective, typed matching."""
+    constraint_features = {
+        con.id: _constraint_features(con, signals, states, modes)
+        for con in constraints
+    }
 
     for req in reqs:
-        tokens = re.findall(r"\b\w+\b", req.text)
-        for tok in tokens:
-            tl = tok.lower()
-            if tl in signal_names:
-                if signal_names[tl] not in req.parsed_signals:
-                    req.parsed_signals.append(signal_names[tl])
-            if tl in state_names:
-                state_name = state_names[tl]
-                if state_name not in req.parsed_states:
-                    req.parsed_states.append(state_name)
-            if tl in mode_names:
-                mode_name = mode_names[tl]
-                if mode_name not in req.parsed_modes:
-                    req.parsed_modes.append(mode_name)
+        req.parsed_signals.clear()
+        req.parsed_states.clear()
+        req.parsed_modes.clear()
+        req.requirement_classes.clear()
+        req.parsed_constraints.clear()
+        req.linkage_reasons.clear()
 
-        for mode in _extract_mode_scope(req.text, mode_names):
-            if mode not in req.parsed_modes:
-                req.parsed_modes.append(mode)
-        # Link constraints by shared signal
+        reqf = _requirement_features(req, signals, states, modes)
+        req.parsed_signals.extend(sorted(reqf.signals))
+        req.parsed_states.extend(sorted(reqf.states))
+        req.parsed_modes.extend(sorted(reqf.modes))
+        req.requirement_classes.extend(sorted(reqf.classes, key=lambda item: item.value))
+
+        linked: list[tuple[str, list[str]]] = []
         for con in constraints:
-            if any(s in req.parsed_signals for s in con.related_signals):
-                if con.id not in req.parsed_constraints:
-                    req.parsed_constraints.append(con.id)
+            reasons = _link_reasons(req, reqf, con, constraint_features[con.id])
+            if reasons:
+                linked.append((con.id, reasons))
+
+        for cid, reasons in linked:
+            req.parsed_constraints.append(cid)
+            req.linkage_reasons[cid] = reasons
 
 
 # ── Public API ────────────────────────────────────────────────────────────────

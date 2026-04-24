@@ -192,3 +192,74 @@ def test_smacc2_atomic_mode_states_validation_slice_clean_baseline(tmp_path):
     assert "UNSAT_IN_MODE" not in categories
     assert metadata["gate"]["failed"] is False
     assert metadata["results"]["highest_severity_found"] in {"NONE", "LOW", "MEDIUM"}
+
+
+def test_smacc2_atomic_mode_states_timing_drift_detects_code_timing_mismatch(tmp_path):
+    result, categories, metadata = _run_review(
+        tmp_path,
+        spec=EXAMPLES / "smacc2_atomic_mode_states_timing_drift" / "spec.md",
+        model=EXAMPLES / "smacc2_atomic_mode_states_timing_drift" / "model.yaml",
+        code=[EXAMPLES / "smacc2_atomic_mode_states_timing_drift" / "controller.py"],
+        fail_on="HIGH",
+    )
+    assert result.exit_code == 2, result.output
+    assert "CODE_TIMING_MISMATCH" in categories
+    assert metadata["gate"]["failed"] is True
+
+
+def test_smacc2_atomic_mode_states_assumption_gap_detects_missing_assumption(tmp_path):
+    result, categories, metadata = _run_review(
+        tmp_path,
+        spec=EXAMPLES / "smacc2_atomic_mode_states_assumption_gap" / "spec.md",
+        model=EXAMPLES / "smacc2_atomic_mode_states_assumption_gap" / "model.yaml",
+        fail_on="HIGH",
+    )
+    assert result.exit_code == 2, result.output
+    assert "MISSING_ASSUMPTION" in categories
+    assert "TRANSITION_GAP" not in categories
+    assert "UNDEFINED_REFERENCE" not in categories
+    assert metadata["gate"]["failed"] is True
+
+
+def test_smacc2_atomic_mode_states_transition_gap_detects_forbidden_unchecked(tmp_path):
+    result, categories, metadata = _run_review(
+        tmp_path,
+        spec=EXAMPLES / "smacc2_atomic_mode_states_transition_gap" / "spec.md",
+        model=EXAMPLES / "smacc2_atomic_mode_states_transition_gap" / "model.yaml",
+        fail_on="HIGH",
+    )
+    assert result.exit_code == 2, result.output
+    assert "FORBIDDEN_UNCHECKED" in categories
+    assert "TRANSITION_GAP" not in categories
+    assert "UNDEFINED_REFERENCE" not in categories
+    assert metadata["gate"]["failed"] is True
+
+
+def test_behaviortree_timeout_precondition_clean_baseline(tmp_path):
+    result, categories, metadata = _run_review(
+        tmp_path,
+        spec=EXAMPLES / "behaviortree_timeout_precondition" / "spec.md",
+        model=EXAMPLES / "behaviortree_timeout_precondition" / "model.yaml",
+        fail_on="HIGH",
+    )
+    assert result.exit_code == 0, result.output
+    assert "FORBIDDEN_UNCHECKED" not in categories
+    assert "TIMING_GAP" not in categories
+    assert "TRANSITION_GAP" not in categories
+    assert "UNDEFINED_REFERENCE" not in categories
+    assert metadata["gate"]["failed"] is False
+
+
+def test_behaviortree_timeout_precondition_guard_gap_detects_forbidden_unchecked(tmp_path):
+    result, categories, metadata = _run_review(
+        tmp_path,
+        spec=EXAMPLES / "behaviortree_timeout_precondition_guard_gap" / "spec.md",
+        model=EXAMPLES / "behaviortree_timeout_precondition_guard_gap" / "model.yaml",
+        fail_on="HIGH",
+    )
+    assert result.exit_code == 2, result.output
+    assert "FORBIDDEN_UNCHECKED" in categories
+    assert "TIMING_GAP" not in categories
+    assert "TRANSITION_GAP" not in categories
+    assert "UNDEFINED_REFERENCE" not in categories
+    assert metadata["gate"]["failed"] is True

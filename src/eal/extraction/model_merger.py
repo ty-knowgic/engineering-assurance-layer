@@ -9,6 +9,7 @@ Model entries override/extend spec entries — they don't replace them.
 from __future__ import annotations
 
 from eal.ingestion.loaders import ModelDocument
+from eal.extraction.spec_extractor import _link_requirements_to_ir
 from eal.ir.schema import (
     Bounds, Constraint, ConstraintScopeType, ConstraintType, Entity, IRSnapshot,
     Mode, Signal, SignalKind, SourceRef, State, Transition,
@@ -220,5 +221,13 @@ def merge_model_into_ir(ir: IRSnapshot, model: ModelDocument) -> IRSnapshot:
             source_ref=_src(model, "mode_constraints"),
         ))
         existing_con_ids.add(cid)
+
+    _link_requirements_to_ir(
+        ir.requirements,
+        ir.signals,
+        ir.states,
+        ir.modes,
+        ir.constraints,
+    )
 
     return ir
