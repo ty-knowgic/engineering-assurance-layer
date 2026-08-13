@@ -1,0 +1,365 @@
+# Adversarial evaluation catalogue.
+#
+# Every entry states the hazard it introduces and the expected EAL outcome
+# BEFORE the harness is run. Entries expected to be missed are deliberately
+# included and are counted as misses, not excused: a suite built only from
+# cases the tool already handles measures nothing.
+#
+# The adversarial core of this catalogue is the "coherent" variants. EAL's Nav2
+# check compares two declarations against each other. Any edit that keeps them
+# agreeing is invisible to it, no matter how dangerous the agreed value is. Those
+# cases are what establish the real shape of the analysis envelope.
+#
+# outcome vocabulary
+#   DETECT            at least one finding of every listed category
+#   UNKNOWN           analysis_status must become INCOMPLETE
+#   MISS              nothing is expected to fire; a capability gap, still a miss
+#   NO_NEW_FINDINGS   must not change findings vs the unmutated baseline
+#
+# hazard: none | low | moderate | severe  — the real-world risk introduced,
+# judged independently of whether EAL can see it.
+
+base_files:
+  mppi: tests/fixtures/nav2_upstream_params/nav2_params.yaml
+  dwb: tests/fixtures/nav2_upstream_params/nav2_system_params.yaml
+
+# Recorded because the current numbers no longer show it. Prior accuracy reads
+# 100% today only because the code was changed to meet the expectations; the
+# expectations themselves were never edited.
+first_run: >
+  The first run reported 6 of 19 hazards detected, with two wrong priors, and it
+  turned up three defects — two in the tool and one in this harness. In the tool:
+  M13 (a motion limit deleted from one side of the comparison) and M15 (the same
+  key declared twice with different values) both stayed silent where the
+  catalogue expected UNKNOWN. Neither was a capability gap; both violated the
+  existing rule that EAL must not report a clean result for input it did not
+  analyze, and both were fixed by adding the INCOMPLETE_COMPARISON and
+  AMBIGUOUS_INPUT coverage gaps. In the harness: detection was measured by
+  diffing finding *categories* against the baseline, which cannot see a mutation
+  that worsens an existing finding. M09 weakens braking sevenfold and was scored
+  as silent because the category was already present in the baseline. Diffing now
+  uses category plus title. That bug made the tool look worse than it is, but it
+  was still a broken instrument, and an evaluation is only as trustworthy as what
+  it measures with. The catalogue's expectations were never edited. Detection over
+  hazards ended at 8 of 19; restoring the UNKNOWN contract did not widen the
+  analysis envelope, and the eleven remaining silent hazards are untouched by it.
+
+mutations:
+
+  # ── 1. Maximum speed increase ──────────────────────────────────────────────
+  - id: M01
+    category: max_speed_increase
+    base: mppi
+    description: "Controller vx_max 0.5 -> 2.0, smoother left at 0.5"
+    hazard: moderate
+    edit: {find: "      vx_max: 0.5\n", replace: "      vx_max: 2.0\n"}
+    expect:
+      outcome: DETECT
+      categories: [NAV2_VELOCITY_OVERDECLARED, NAV2_HORIZON_EXCEEDS_COSTMAP]
+    rationale: >
+      Controller now plans 4x faster than the chain delivers, and the prediction
+      horizon (56 * 0.05 * 2.0 = 5.6 m) far overruns the 1.5 m costmap radius.
+
+  - id: M02
+    category: max_speed_increase
+    base: mppi
+    description: "Speed raised coherently on BOTH controller and smoother, 0.5 -> 2.0"
+    hazard: severe
+    edits:
+      - {find: "      vx_max: 0.5\n", replace: "      vx_max: 2.0\n"}
+      - {find: "    max_velocity: [0.5, 0.0, 2.0]\n", replace: "    max_velocity: [2.0, 0.0, 2.0]\n"}
+    expect:
+      outcome: DETECT
+      categories: [NAV2_HORIZON_EXCEEDS_COSTMAP]
+    rationale: >
+      A 4x speed increase with no change to braking, sensor range, or costmap
+      size. The limit-coherence check cannot see it because the two declarations
+      still agree. Only the horizon rule catches it, and only because MPPI
+      happens to declare a prediction horizon. Stopping distance quadruples and
+      nothing in EAL models that.
+
+  - id: M03
+    category: max_speed_increase
+    base: dwb
+    description: "DWB speed raised coherently, 0.26 -> 2.0 on controller and smoother"
+    hazard: severe
+    edits:
+      - {find: "      max_vel_x: 0.26\n", replace: "      max_vel_x: 2.0\n"}
+      - {find: "      max_speed_xy: 0.26\n", replace: "      max_speed_xy: 2.0\n"}
+      - {find: "    max_velocity: [0.26, 0.0, 1.0]\n", replace: "    max_velocity: [2.0, 0.0, 1.0]\n"}
+    expect:
+      outcome: MISS
+    rationale: >
+      Same 8x speed increase on the DWB stack. DWB declares no prediction
+      horizon, so the horizon rule does not apply and EAL is entirely silent.
+      This is the clearest demonstration of the envelope's limit: a coherent,
+      dangerous change on a controller without a horizon is invisible.
+
+  # ── 2. Stopping region reduction ───────────────────────────────────────────
+  - id: M04
+    category: stopping_region_reduction
+    base: mppi
+    description: "Local costmap shrunk 3x3 m -> 1x1 m"
+    hazard: moderate
+    edits:
+      - {find: "      width: 3\n", replace: "      width: 1\n"}
+      - {find: "      height: 3\n", replace: "      height: 1\n"}
+    expect:
+      outcome: DETECT
+      categories: [NAV2_HORIZON_EXCEEDS_COSTMAP]
+    rationale: >
+      1.4 m of prediction against a 0.5 m radius. The planner reasons about
+      space it has no map data for.
+
+  - id: M05
+    category: stopping_region_reduction
+    base: mppi
+    description: "Sensor marking range obstacle_max_range 2.5 -> 0.4 m (local costmap)"
+    hazard: severe
+    edit: {find: "          obstacle_max_range: 2.5\n", replace: "          obstacle_max_range: 0.4\n", occurrence: 1}
+    expect:
+      outcome: MISS
+    rationale: >
+      Obstacles beyond 0.4 m are discarded before reaching the costmap
+      (obstacle_layer.cpp:552), so the robot cannot brake for what it cannot
+      see. EAL extracts this value but no check consumes it. A severe hazard
+      that is fully present in the config and still invisible.
+
+  - id: M06
+    category: stopping_region_reduction
+    base: mppi
+    description: "Inflation radius 0.70 -> 0.05 m"
+    hazard: moderate
+    edit: {find: "        inflation_radius: 0.70\n", replace: "        inflation_radius: 0.05\n"}
+    expect:
+      outcome: MISS
+    rationale: >
+      The inflation layer is what keeps planned paths away from obstacles rather
+      than grazing them. At 0.05 m the margin is below the costmap resolution,
+      so paths may be planned essentially in contact with obstacles. EAL extracts
+      inflation_radius and relates it to nothing, so the change is invisible.
+
+  # ── 3. Latency increase ────────────────────────────────────────────────────
+  - id: M07
+    category: latency_increase
+    base: mppi
+    description: "controller_frequency 20 Hz -> 2 Hz"
+    hazard: severe
+    edit: {find: "    controller_frequency: 20.0\n", replace: "    controller_frequency: 2.0\n"}
+    expect:
+      outcome: MISS
+    rationale: >
+      Control period grows from 50 ms to 500 ms, adding 0.45 m of travel at
+      1 m/s before the next command. Extracted as a timing parameter, unchecked.
+
+  - id: M08
+    category: latency_increase
+    base: mppi
+    description: "Local costmap update_frequency 5 Hz -> 0.5 Hz"
+    hazard: moderate
+    edit: {find: "      update_frequency: 5.0\n", replace: "      update_frequency: 0.5\n", occurrence: 1}
+    expect:
+      outcome: MISS
+    rationale: >
+      Obstacle data becomes up to 2 s stale, so at 0.5 m/s the robot may act on a
+      picture of the world a metre out of date. The value is extracted and typed
+      as a timing parameter, but no check relates costmap freshness to the speed
+      the robot is allowed to travel, so nothing fires.
+
+  # ── 4. Minimum deceleration reduction ──────────────────────────────────────
+  - id: M09
+    category: min_decel_reduction
+    base: mppi
+    description: "Smoother max_decel -2.5 -> -0.4, controller left at -3.0"
+    hazard: severe
+    edit: {find: "    max_decel: [-2.5, 0.0, -3.2]\n", replace: "    max_decel: [-0.4, 0.0, -3.2]\n"}
+    expect:
+      outcome: DETECT
+      categories: [NAV2_ACCEL_OVERDECLARED]
+    rationale: >
+      Controller assumes 7.5x the braking the chain will deliver. This is the
+      case the check was built for, at an exaggerated ratio.
+
+  - id: M10
+    category: min_decel_reduction
+    base: mppi
+    description: "Braking weakened coherently on both sides, 3.0/2.5 -> 0.4"
+    hazard: severe
+    edits:
+      - {find: "      ax_min: -3.0\n", replace: "      ax_min: -0.4\n"}
+      - {find: "      ax_max: 3.0\n", replace: "      ax_max: 0.4\n"}
+      - {find: "    max_decel: [-2.5, 0.0, -3.2]\n", replace: "    max_decel: [-0.4, 0.0, -3.2]\n"}
+      - {find: "    max_accel: [2.5, 0.0, 3.2]\n", replace: "    max_accel: [0.4, 0.0, 3.2]\n"}
+    expect:
+      outcome: MISS
+    rationale: >
+      Stopping distance from 0.5 m/s grows from 0.05 m to 0.31 m, over 6x, and
+      the two declarations agree perfectly. Coherent and dangerous.
+
+  # ── 5. Unit mismatch ───────────────────────────────────────────────────────
+  - id: M11
+    category: unit_mismatch
+    base: mppi
+    description: "wz_max written in deg/s instead of rad/s (1.9 -> 108.9)"
+    hazard: moderate
+    edit: {find: "      wz_max: 1.9\n", replace: "      wz_max: 108.9\n"}
+    expect:
+      outcome: DETECT
+      categories: [NAV2_VELOCITY_OVERDECLARED]
+    rationale: >
+      Caught, but as a 54x over-declaration rather than as a unit error. Right
+      alarm, wrong diagnosis — record it as a partial detection.
+
+  - id: M12
+    category: unit_mismatch
+    base: mppi
+    description: "Angular limits converted to deg/s on both sides consistently"
+    hazard: moderate
+    edits:
+      - {find: "      wz_max: 1.9\n", replace: "      wz_max: 108.9\n"}
+      - {find: "    max_velocity: [0.5, 0.0, 2.0]\n", replace: "    max_velocity: [0.5, 0.0, 114.6]\n"}
+    expect:
+      outcome: MISS
+    rationale: >
+      A consistent unit error is arithmetically coherent. EAL has no notion of
+      a plausible magnitude for a quantity, so nothing fires.
+
+  # ── 6. Missing parameter ───────────────────────────────────────────────────
+  - id: M13
+    category: missing_parameter
+    base: mppi
+    description: "ax_min deleted from the controller block"
+    hazard: moderate
+    edit: {find: "      ax_min: -3.0\n", replace: ""}
+    expect:
+      outcome: UNKNOWN
+    rationale: >
+      One side of a coherence comparison has vanished. EAL was asked to check
+      that limits agree and can no longer do so for this role, which is the
+      definition of UNKNOWN. If it instead stays silent, that is the TD-2
+      failure mode returning at finer grain.
+
+  - id: M14
+    category: missing_parameter
+    base: mppi
+    description: "Entire velocity_smoother section removed"
+    hazard: moderate
+    edit: {find: "velocity_smoother:\n", replace: "velocity_smoother_removed:\n"}
+    expect:
+      outcome: MISS
+    rationale: >
+      Documented as inapplicable rather than unknown: a stack legitimately may
+      not run the smoother. Listed so the decision stays visible and arguable.
+
+  # ── 7. Conflicting duplicate definitions ───────────────────────────────────
+  - id: M15
+    category: conflicting_definitions
+    base: mppi
+    description: "vx_max declared twice in the same block with different values"
+    hazard: severe
+    edit: {find: "      vx_max: 0.5\n", replace: "      vx_max: 0.5\n      vx_max: 3.0\n"}
+    expect:
+      outcome: UNKNOWN
+    rationale: >
+      YAML silently keeps the last duplicate key, so the file says 0.5 to a
+      human reader and 3.0 to the parser. Any tool claiming to review
+      configuration must not quietly adopt one reading. Expected UNKNOWN;
+      a silent result here would be a serious defect.
+
+  - id: M16
+    category: conflicting_definitions
+    base: mppi
+    description: "Second controller plugin block with contradictory limits"
+    hazard: moderate
+    edit:
+      find: "    controller_plugins: [\"FollowPath\"]\n"
+      replace: "    controller_plugins: [\"FollowPath\", \"AltPath\"]\n    AltPath:\n      plugin: \"nav2_mppi_controller::MPPIController\"\n      vx_max: 5.0\n      ax_min: -9.0\n"
+    expect:
+      outcome: MISS
+    rationale: >
+      The importer takes the first plugin entry that resolves and never looks at
+      the second, so a contradictory alternative controller is unexamined.
+
+  # ── 8. Irrelevant change (false-positive probe) ────────────────────────────
+  - id: M17
+    category: irrelevant_change
+    base: mppi
+    description: "batch_size 2000 -> 1000 (compute budget, not a safety limit)"
+    hazard: none
+    edit: {find: "      batch_size: 2000\n", replace: "      batch_size: 1000\n"}
+    expect: {outcome: NO_NEW_FINDINGS}
+    rationale: "Sampling budget. Any finding here is a false positive."
+
+  - id: M18
+    category: irrelevant_change
+    base: mppi
+    description: "visualize true -> false (debug output only)"
+    hazard: none
+    edit: {find: "      visualize: true\n", replace: "      visualize: false\n"}
+    expect: {outcome: NO_NEW_FINDINGS}
+    rationale: "Debug flag. Any finding here is a false positive."
+
+  - id: M19
+    category: irrelevant_change
+    base: mppi
+    description: "A comment line added inside the controller block"
+    hazard: none
+    edit: {find: "      batch_size: 2000\n", replace: "      # tuned 2026-08\n      batch_size: 2000\n"}
+    expect: {outcome: NO_NEW_FINDINGS}
+    rationale: "Whitespace and comments must not affect a deterministic result."
+
+  # ── 9. Unknown parameters ──────────────────────────────────────────────────
+  - id: M20
+    category: unknown_parameter
+    base: mppi
+    description: "Unrecognised controller plugin"
+    hazard: moderate
+    edit:
+      find: "      plugin: \"nav2_mppi_controller::MPPIController\"\n"
+      replace: "      plugin: \"acme::ProprietaryController\"\n"
+    expect: {outcome: UNKNOWN}
+    rationale: >
+      No validated role mapping exists for this plugin, so none of its motion
+      limits can be extracted and none of the coherence checks can run. Guessing
+      a mapping from familiar-looking parameter names would produce a confident
+      result with nothing behind it, so the honest output is UNKNOWN rather than
+      a clean pass.
+
+  - id: M21
+    category: unknown_parameter
+    base: mppi
+    description: "Unmodelled extra parameter added to the controller block"
+    hazard: low
+    edit: {find: "      batch_size: 2000\n", replace: "      batch_size: 2000\n      acme_gain_factor: 42.0\n"}
+    expect: {outcome: NO_NEW_FINDINGS}
+    rationale: >
+      Real configs carry many parameters EAL does not model. Flagging every one
+      would make the tool unusable; silence here is correct, not a gap.
+
+  # ── 10. Deliberately wrong safety assumption ───────────────────────────────
+  - id: M22
+    category: false_safety_assumption
+    base: mppi
+    description: "Smoother claims 100 m/s^2 braking capability"
+    hazard: severe
+    edit: {find: "    max_decel: [-2.5, 0.0, -3.2]\n", replace: "    max_decel: [-100.0, 0.0, -3.2]\n"}
+    expect:
+      outcome: MISS
+    rationale: >
+      Roughly 10 g of braking, physically absurd for a wheeled robot. Because
+      the controller is now the conservative side, the only thing EAL says is a
+      strict-only informational item. It has no notion of physical plausibility.
+
+  - id: M23
+    category: false_safety_assumption
+    base: mppi
+    description: "Zero modelled actuation delay asserted alongside a 2 Hz control loop"
+    hazard: severe
+    edits:
+      - {find: "    controller_frequency: 20.0\n", replace: "    controller_frequency: 2.0\n"}
+      - {find: "      model_delay_vx: 0.0\n", replace: "      model_delay_vx: 0.0  # asserted zero\n"}
+    expect:
+      outcome: MISS
+    rationale: >
+      The model asserts no actuation delay while the loop runs at 500 ms. EAL
+      extracts both numbers and never relates them.

@@ -236,6 +236,8 @@ def run_review(
             nav2_params_path=nav2_params_path,
             nav2_unsupported=nav2_unsupported,
             nav2_contributed=nav2_contributed,
+            nav2_duplicate_keys=nav2_slice.duplicate_keys if nav2_slice else [],
+            nav2_unchecked_roles=nav2_slice.unchecked_roles if nav2_slice else [],
         )
         status = analysis_status(coverage_gaps)
         incomplete = bool(coverage_gaps)

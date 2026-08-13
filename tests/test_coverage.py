@@ -207,6 +207,63 @@ def test_code_file_yielding_nothing_is_unknown(tmp_path):
     )
 
 
+def test_duplicate_yaml_key_is_ambiguous_not_silently_resolved(tmp_path):
+    """
+    PyYAML keeps the last duplicate. A review tool must not quietly adopt one
+    reading of a file that has two. Found by the Phase 3 mutation M15.
+    """
+    src = (Path(__file__).parent / "fixtures" / "nav2_upstream_params"
+           / "nav2_params.yaml").read_text()
+    p = tmp_path / "params.yaml"
+    p.write_text(src.replace("      vx_max: 0.5\n", "      vx_max: 0.5\n      vx_max: 3.0\n", 1))
+
+    exit_code, findings, metadata, _ = _review(
+        "--spec", EXAMPLES / "ci_smoke" / "spec.md",
+        "--nav2-params", p, "--policy-profile", "ci", tmp_path / "out",
+    )
+    assert exit_code == 3
+    assert metadata["results"]["status"] == "UNKNOWN"
+    gap = next(
+        g for g in findings["coverage_gaps"] if g["category"] == "AMBIGUOUS_INPUT"
+    )
+    assert "vx_max" in gap["unanalyzed_constructs"]
+
+
+def test_limit_declared_on_one_side_only_is_incomplete_comparison(tmp_path):
+    """
+    Deleting one side of a comparison must not read as "no mismatch found".
+    Found by the Phase 3 mutation M13.
+    """
+    src = (Path(__file__).parent / "fixtures" / "nav2_upstream_params"
+           / "nav2_params.yaml").read_text()
+    p = tmp_path / "params.yaml"
+    p.write_text(src.replace("      ax_min: -3.0\n", "", 1))
+
+    _, findings, metadata, _ = _review(
+        "--spec", EXAMPLES / "ci_smoke" / "spec.md",
+        "--nav2-params", p, tmp_path / "out",
+    )
+    assert metadata["results"]["status"] == "UNKNOWN"
+    gap = next(
+        g for g in findings["coverage_gaps"]
+        if g["category"] == "INCOMPLETE_COMPARISON"
+    )
+    assert "a_decel_linear" in gap["unanalyzed_constructs"]
+
+
+def test_intact_upstream_configs_have_no_ambiguity_or_incomplete_comparison(tmp_path):
+    """The two new gap kinds must not fire on any unmodified upstream file."""
+    params_dir = Path(__file__).parent / "fixtures" / "nav2_upstream_params"
+    for params in sorted(params_dir.glob("*.yaml")):
+        _, findings, _, _ = _review(
+            "--spec", EXAMPLES / "ci_smoke" / "spec.md",
+            "--nav2-params", params, tmp_path / params.stem,
+        )
+        categories = {g["category"] for g in findings["coverage_gaps"]}
+        assert "AMBIGUOUS_INPUT" not in categories, params.name
+        assert "INCOMPLETE_COMPARISON" not in categories, params.name
+
+
 def test_empty_model_yaml_is_unknown(tmp_path):
     spec = tmp_path / "spec.md"
     spec.write_text(

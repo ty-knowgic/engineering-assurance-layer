@@ -22,6 +22,11 @@ Categories:
       contributed nothing to the IR. Nothing about it was checked.
   NO_ANALYZABLE_CONTENT       — the merged IR has no signals, constraints, or
       transitions, so no rule or solver check could have fired at all.
+  AMBIGUOUS_INPUT             — the same fact is declared more than once with
+      conflicting values. The parser's reading may differ from what a human
+      reading the file would conclude, so neither can be relied on.
+  INCOMPLETE_COMPARISON       — a cross-artifact check ran but could not cover
+      every quantity, because one side of the comparison is absent.
 """
 
 from __future__ import annotations
@@ -35,6 +40,8 @@ class CoverageGapCategory(str, Enum):
     UNSUPPORTED_INPUT_CONSTRUCT = "UNSUPPORTED_INPUT_CONSTRUCT"
     INPUT_YIELDED_NO_CONTENT = "INPUT_YIELDED_NO_CONTENT"
     NO_ANALYZABLE_CONTENT = "NO_ANALYZABLE_CONTENT"
+    AMBIGUOUS_INPUT = "AMBIGUOUS_INPUT"
+    INCOMPLETE_COMPARISON = "INCOMPLETE_COMPARISON"
 
 
 class AnalysisStatus(str, Enum):
@@ -82,6 +89,8 @@ def detect_coverage_gaps(
     nav2_params_path=None,
     nav2_unsupported: list[str] | None = None,
     nav2_contributed: bool = True,
+    nav2_duplicate_keys: list[str] | None = None,
+    nav2_unchecked_roles: list[str] | None = None,
 ) -> list[CoverageGap]:
     """
     Determine what EAL was asked to analyze but did not.
@@ -94,6 +103,8 @@ def detect_coverage_gaps(
     gaps: list[CoverageGap] = []
     bt_unsupported_nodes = bt_unsupported_nodes or []
     nav2_unsupported = nav2_unsupported or []
+    nav2_duplicate_keys = nav2_duplicate_keys or []
+    nav2_unchecked_roles = nav2_unchecked_roles or []
     code_paths = code_paths or []
 
     # U1 — the importer told us what it threw away.
@@ -131,6 +142,43 @@ def detect_coverage_gaps(
             suggested_fix=(
                 "Add a validated role mapping for this plugin, backed by a real "
                 "upstream params file, before relying on results for this config."
+            ),
+        ))
+
+    if nav2_params_path is not None and nav2_duplicate_keys:
+        gaps.append(CoverageGap(
+            id="U-000",
+            category=CoverageGapCategory.AMBIGUOUS_INPUT,
+            title=f"Nav2 config declares {len(nav2_duplicate_keys)} key(s) more than once",
+            summary=(
+                "These keys appear multiple times in the same mapping: "
+                + ", ".join(nav2_duplicate_keys)
+                + ". YAML silently keeps the last occurrence, so the file may say one "
+                "thing to a human reading it and another to the parser. No result "
+                "derived from these keys can be relied on."
+            ),
+            affected_input=str(nav2_params_path),
+            unanalyzed_constructs=list(nav2_duplicate_keys),
+            suggested_fix="Remove the duplicate declarations so the file has one reading.",
+        ))
+
+    if nav2_params_path is not None and nav2_unchecked_roles:
+        gaps.append(CoverageGap(
+            id="U-000",
+            category=CoverageGapCategory.INCOMPLETE_COMPARISON,
+            title=f"{len(nav2_unchecked_roles)} motion limit(s) declared on only one side",
+            summary=(
+                "These limits are declared by the controller or the velocity_smoother "
+                "but not both, so their coherence was not checked: "
+                + ", ".join(nav2_unchecked_roles)
+                + ". Absence of a mismatch finding for them means they were not "
+                "compared, not that they agree."
+            ),
+            affected_input=str(nav2_params_path),
+            unanalyzed_constructs=list(nav2_unchecked_roles),
+            suggested_fix=(
+                "Declare the limit on both sides, or accept that this quantity is "
+                "outside the checked set."
             ),
         ))
 

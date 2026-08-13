@@ -30,7 +30,7 @@ from __future__ import annotations
 
 from enum import Enum
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Optional  # noqa: F401  (Any used in loader return type)
 
 import yaml
 from pydantic import BaseModel, Field
@@ -38,6 +38,43 @@ from pydantic import BaseModel, Field
 from eal.ir.schema import Constraint, ConstraintType, Entity, IRSnapshot, SourceRef
 
 ROS_PARAMS = "ros__parameters"
+
+
+class _DuplicateKeyRecorder(yaml.SafeLoader):
+    """
+    A SafeLoader that records duplicate mapping keys instead of hiding them.
+
+    PyYAML silently keeps the last of two identical keys. For a review tool that
+    is the worst possible behaviour: the file says one value to a human reading
+    it top to bottom and a different value to the parser, and the tool reports
+    confidently on the reading the human never saw. Duplicates are collected
+    here and surfaced as an AMBIGUOUS_INPUT coverage gap.
+    """
+
+    def __init__(self, *args, **kwargs) -> None:
+        super().__init__(*args, **kwargs)
+        self.duplicate_keys: list[str] = []
+
+    def construct_mapping(self, node, deep=False):  # noqa: D102
+        seen: set = set()
+        for key_node, _ in node.value:
+            key = self.construct_object(key_node, deep=deep)
+            try:
+                if key in seen:
+                    self.duplicate_keys.append(str(key))
+                seen.add(key)
+            except TypeError:  # unhashable key; not our concern
+                pass
+        return super().construct_mapping(node, deep=deep)
+
+
+def _load_yaml_recording_duplicates(path: Path) -> tuple[Any, list[str]]:
+    loader = _DuplicateKeyRecorder(path.read_text(encoding="utf-8"))
+    try:
+        data = loader.get_single_data()
+        return data, sorted(dict.fromkeys(loader.duplicate_keys))
+    finally:
+        loader.dispose()
 
 
 class LimitRole(str, Enum):
@@ -149,6 +186,9 @@ class Nav2ParamSlice(BaseModel):
     values: list[Nav2Value] = Field(default_factory=list)
     unsupported_constructs: list[str] = Field(default_factory=list)
     absent_sections: list[str] = Field(default_factory=list)
+    duplicate_keys: list[str] = Field(default_factory=list)
+    # Roles declared on exactly one side, so coherence cannot be judged for them.
+    unchecked_roles: list[str] = Field(default_factory=list)
 
     def by_stage(self, stage: Nav2Stage) -> dict[LimitRole, Nav2Value]:
         return {v.role: v for v in self.values if v.stage is stage and v.role is not None}
@@ -214,7 +254,7 @@ def _collect_scalars(
 
 def parse_nav2_params(path: Path) -> Nav2ParamSlice:
     """Parse a Nav2 parameter YAML into a deterministic extraction slice."""
-    raw = yaml.safe_load(path.read_text(encoding="utf-8"))
+    raw, duplicate_keys = _load_yaml_recording_duplicates(path)
     doc = raw if isinstance(raw, dict) else {}
     values: list[Nav2Value] = []
     unsupported: list[str] = []
@@ -332,14 +372,25 @@ def parse_nav2_params(path: Path) -> Nav2ParamSlice:
                     yaml_prefix=f"{lbase}.{source}",
                 )
 
-    return Nav2ParamSlice(
+    slice_ = Nav2ParamSlice(
         path=str(path),
         controller_plugin=plugin,
         controller_plugin_key=plugin_key,
         values=values,
         unsupported_constructs=unsupported,
         absent_sections=absent,
+        duplicate_keys=duplicate_keys,
     )
+
+    # A role present on only one side cannot be compared. Staying silent there
+    # would report "no mismatch" for a quantity that was never checked.
+    controller_roles = set(slice_.by_stage(Nav2Stage.CONTROLLER))
+    smoother_roles = set(slice_.by_stage(Nav2Stage.SMOOTHER))
+    if controller_roles and smoother_roles:
+        slice_.unchecked_roles = sorted(
+            r.value for r in controller_roles.symmetric_difference(smoother_roles)
+        )
+    return slice_
 
 
 # ── IR contribution ───────────────────────────────────────────────────────────

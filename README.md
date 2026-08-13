@@ -118,7 +118,42 @@ keep their real run ids, timestamps, and git info. Input provenance is not
 normalized away — each artifact still carries the SHA-256 of its inputs in
 `review_evidence.json`.
 
-Other targets: `make test`, `make lint`, `make demo`, `make demo-check`.
+Other targets: `make test`, `make lint`, `make demo`, `make demo-check`,
+`make eval`, `make eval-check`.
+
+---
+
+## What EAL Does Not Catch
+
+`make eval` runs an adversarial mutation evaluation: 23 edits to unmodified
+upstream Nav2 configs, each with the hazard it introduces and the expected EAL
+outcome recorded in [`eval/mutations.yaml`](eval/mutations.yaml) **before** the
+harness ran. Expectations are never edited to match results. Full report:
+[`eval/RESULTS.md`](eval/RESULTS.md).
+
+**EAL says something about 8 of the 19 mutations that introduce a real hazard
+(42%). It is silent on the other 11.** Zero false positives on harmless edits.
+
+The detection rate is computed over every hazardous mutation, including ones the
+catalogue predicted would be missed. A documented blind spot is still a blind
+spot.
+
+The silent cases share a shape worth stating plainly: **the limit-coherence
+check compares two declarations against each other, so any edit that keeps them
+agreeing is invisible, no matter how dangerous the agreed value is.** Examples
+that produce no output at all:
+
+- speed raised 8x coherently on both controller and smoother (DWB, no horizon rule to catch it)
+- braking weakened 6x coherently on both sides
+- sensor marking range cut from 2.5 m to 0.4 m, so the robot cannot see far enough to stop
+- control loop slowed from 20 Hz to 2 Hz
+- a smoother claiming 100 m/s² of braking, roughly 10 g
+- a unit error applied consistently to both sides
+
+EAL has no model of stopping distance, latency, or physical plausibility, and no
+notion of what magnitude is reasonable for a quantity. It checks that
+declarations agree with each other and that one upstream-documented horizon rule
+holds. That is the entire envelope.
 
 ---
 
@@ -563,6 +598,8 @@ comparison and let unanalyzable input masquerade as a graded result.
 | Category | Fires when |
 |----------|-----------|
 | `UNSUPPORTED_INPUT_CONSTRUCT` | An importer named constructs it does not model (BehaviorTree nodes outside the supported subset; a Nav2 controller plugin with no validated mapping) |
+| `AMBIGUOUS_INPUT` | The same key is declared twice with different values. YAML keeps the last, so the file may read differently to a human than to the parser |
+| `INCOMPLETE_COMPARISON` | A cross-artifact check ran but one side of some quantity is absent, so those quantities were not compared |
 | `INPUT_YIELDED_NO_CONTENT` | An input file was explicitly supplied but contributed nothing to the IR |
 | `NO_ANALYZABLE_CONTENT` | The merged IR has no signals, constraints, or transitions, so no check could have fired |
 
@@ -789,6 +826,7 @@ tests/test_nav2_params.py  — Nav2 param extraction vs hand-read values on real
 tests/test_nav2_coherence.py — Nav2 limit-coherence and horizon checks, incl. direction regression
 tests/test_demo.py         — demo fixture provenance and committed-output integrity
 tests/test_unsat_core.py   — core minimality verified by brute force over proper subsets
+tests/test_eval.py         — adversarial catalogue integrity; asserts the tool still fails cases
 ```
 
 ---

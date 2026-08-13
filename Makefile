@@ -1,4 +1,4 @@
-.PHONY: help install test lint demo demo-check verify
+.PHONY: help install test lint demo demo-check eval eval-check verify
 
 help:
 	@echo "install     Create .venv and install the package with dev extras"
@@ -6,7 +6,9 @@ help:
 	@echo "lint        Run ruff"
 	@echo "demo        Regenerate demo/output/ from unmodified upstream Nav2 files"
 	@echo "demo-check  Verify committed demo output still reproduces byte-for-byte"
-	@echo "verify      install + test + demo-check (what a reviewer should run)"
+	@echo "eval        Run the Phase 3 adversarial mutation evaluation"
+	@echo "eval-check  Verify committed eval results still reproduce"
+	@echo "verify      install + test + demo-check + eval-check (what a reviewer should run)"
 
 VENV := .venv
 PY := $(VENV)/bin/python
@@ -30,4 +32,10 @@ demo: $(VENV)
 demo-check: $(VENV)
 	$(PY) scripts/run_demo.py --check
 
-verify: install test demo-check
+eval: $(VENV)
+	$(PY) eval/run_eval.py
+
+eval-check: $(VENV)
+	$(PY) eval/run_eval.py --check
+
+verify: install test demo-check eval-check

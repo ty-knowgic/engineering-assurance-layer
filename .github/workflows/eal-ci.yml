@@ -34,6 +34,9 @@ jobs:
       - name: Verify demo reproduces byte-for-byte
         run: python scripts/run_demo.py --check
 
+      - name: Verify adversarial evaluation reproduces
+        run: python eval/run_eval.py --check
+
       - name: "Run EAL CI smoke review (policy: ci)"
         id: review_run
         continue-on-error: true
