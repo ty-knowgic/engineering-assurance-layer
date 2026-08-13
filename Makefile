@@ -1,4 +1,4 @@
-.PHONY: help install test lint demo demo-check eval eval-check verify
+.PHONY: help install test lint demo demo-check eval eval-check hazard-register verify
 
 help:
 	@echo "install     Create .venv and install the package with dev extras"
@@ -8,6 +8,7 @@ help:
 	@echo "demo-check  Verify committed demo output still reproduces byte-for-byte"
 	@echo "eval        Run the Phase 3 adversarial mutation evaluation"
 	@echo "eval-check  Verify committed eval results still reproduce"
+	@echo "hazard-register  Regenerate the shipped unchecked-hazard register"
 	@echo "verify      install + test + demo-check + eval-check (what a reviewer should run)"
 
 VENV := .venv
@@ -37,5 +38,8 @@ eval: $(VENV)
 
 eval-check: $(VENV)
 	$(PY) eval/run_eval.py --check
+
+hazard-register: $(VENV)
+	$(PY) scripts/generate_hazard_register.py
 
 verify: install test demo-check eval-check

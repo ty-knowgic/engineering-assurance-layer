@@ -83,7 +83,7 @@ SCENARIOS: list[tuple[str, str, list[str]]] = [
 ]
 
 EXIT_MEANING = {
-    0: "PASS",
+    0: "NO FINDINGS IN SCOPE",
     2: "FAIL (severity gate)",
     3: "UNKNOWN (analysis coverage incomplete)",
     1: "PIPELINE ERROR",

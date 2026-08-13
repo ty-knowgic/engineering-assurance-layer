@@ -9,10 +9,10 @@ paths) are normalized so these outputs can be diffed — see
 
 | Scenario | Exit | Outcome | Analysis | Findings |
 |----------|------|---------|----------|----------|
-| `nav2_dwb_coherent` | 0 | PASS | COMPLETE | 0 |
-| `nav2_mppi_bringup` | 2 | FAIL (severity gate) | COMPLETE | 3 |
-| `nav2_mppi_no_map` | 2 | FAIL (severity gate) | COMPLETE | 6 |
-| `nav2_bt_unanalyzable` | 3 | UNKNOWN (analysis coverage incomplete) | INCOMPLETE | 0 |
+| `nav2_dwb_coherent` | 0 | NO FINDINGS IN SCOPE | INPUTS_FULLY_READ | 0 |
+| `nav2_mppi_bringup` | 2 | FAIL (severity gate) | INPUTS_FULLY_READ | 3 |
+| `nav2_mppi_no_map` | 2 | FAIL (severity gate) | INPUTS_FULLY_READ | 6 |
+| `nav2_bt_unanalyzable` | 3 | UNKNOWN (analysis coverage incomplete) | INPUTS_NOT_FULLY_READ | 0 |
 
 ## nav2_dwb_coherent
 
@@ -22,7 +22,7 @@ Upstream DWB config: controller and smoother limits agree
 eal review --spec demo/spec/nav2_motion_limits.md --nav2-params tests/fixtures/nav2_upstream_params/nav2_system_params.yaml --policy-profile ci
 ```
 
-Exit `0` — PASS. Analysis status `COMPLETE`, gate `PASS`, 0 coverage gap(s).
+Exit `0` — NO FINDINGS IN SCOPE. Analysis status `INPUTS_FULLY_READ`, gate `BELOW_THRESHOLD`, 0 coverage gap(s).
 
 _No findings._
 
@@ -36,7 +36,7 @@ Upstream MPPI bringup config: acceleration limits disagree with smoother
 eal review --spec demo/spec/nav2_motion_limits.md --nav2-params tests/fixtures/nav2_upstream_params/nav2_params.yaml --policy-profile ci
 ```
 
-Exit `2` — FAIL (severity gate). Analysis status `COMPLETE`, gate `FAIL`, 0 coverage gap(s).
+Exit `2` — FAIL (severity gate). Analysis status `INPUTS_FULLY_READ`, gate `THRESHOLD_EXCEEDED`, 0 coverage gap(s).
 
 | Severity | Category | Finding |
 |---|---|---|
@@ -54,7 +54,7 @@ Upstream MPPI GPS config: acceleration and velocity limits disagree
 eal review --spec demo/spec/nav2_motion_limits.md --nav2-params tests/fixtures/nav2_upstream_params/nav2_no_map_params.yaml --policy-profile ci
 ```
 
-Exit `2` — FAIL (severity gate). Analysis status `COMPLETE`, gate `FAIL`, 0 coverage gap(s).
+Exit `2` — FAIL (severity gate). Analysis status `INPUTS_FULLY_READ`, gate `THRESHOLD_EXCEEDED`, 0 coverage gap(s).
 
 | Severity | Category | Finding |
 |---|---|---|
@@ -75,7 +75,7 @@ Upstream Nav2 behavior tree: outside EAL's analysis envelope (UNKNOWN)
 eal review --spec demo/spec/nav2_motion_limits.md --bt-xml tests/fixtures/nav2_upstream_bt/navigate_to_pose_w_replanning_and_recovery.xml --policy-profile ci
 ```
 
-Exit `3` — UNKNOWN (analysis coverage incomplete). Analysis status `INCOMPLETE`, gate `UNKNOWN`, 2 coverage gap(s).
+Exit `3` — UNKNOWN (analysis coverage incomplete). Analysis status `INPUTS_NOT_FULLY_READ`, gate `UNKNOWN`, 2 coverage gap(s).
 
 _No findings._
 

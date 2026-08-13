@@ -212,8 +212,8 @@ def test_clean_config_passes_ci_gate(minimal_spec, tmp_path):
         "--policy-profile", "ci", tmp_path / "out",
     )
     assert exit_code == 0
-    assert metadata["gate"]["result"] == "PASS"
-    assert findings["analysis_status"] == "COMPLETE"
+    assert metadata["gate"]["result"] == "BELOW_THRESHOLD"
+    assert findings["analysis_status"] == "INPUTS_FULLY_READ"
     assert not [
         f for f in findings["findings"] if f["category"].startswith("NAV2_")
     ]
@@ -227,7 +227,7 @@ def test_clean_config_still_passes_ci_gate_at_strict(minimal_spec, tmp_path):
         "--policy-profile", "ci", "--strictness", "strict", tmp_path / "out",
     )
     assert exit_code == 0
-    assert metadata["gate"]["result"] == "PASS"
+    assert metadata["gate"]["result"] == "BELOW_THRESHOLD"
 
 
 def test_mismatched_config_fails_ci_gate(minimal_spec, tmp_path):
@@ -237,9 +237,9 @@ def test_mismatched_config_fails_ci_gate(minimal_spec, tmp_path):
         "--policy-profile", "ci", tmp_path / "out",
     )
     assert exit_code == 2
-    assert metadata["gate"]["result"] == "FAIL"
+    assert metadata["gate"]["result"] == "THRESHOLD_EXCEEDED"
     # UNKNOWN must not be involved: the input was fully analyzed.
-    assert findings["analysis_status"] == "COMPLETE"
+    assert findings["analysis_status"] == "INPUTS_FULLY_READ"
     assert [f for f in findings["findings"] if f["category"] == ACCEL]
 
 

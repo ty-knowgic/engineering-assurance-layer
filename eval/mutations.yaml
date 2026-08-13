@@ -44,6 +44,75 @@ first_run: >
   hazards ended at 8 of 19; restoring the UNKNOWN contract did not widen the
   analysis envelope, and the eleven remaining silent hazards are untouched by it.
 
+# Human-readable statement of what EAL cannot see, per mutation category.
+#
+# scripts/generate_hazard_register.py turns these, plus the measured results,
+# into src/eal/data/unchecked_hazards.yaml, which is emitted with EVERY review
+# run. A category appears in the shipped register only while at least one
+# hazardous mutation in it is still going undetected, so the register cannot
+# drift away from what was actually measured, in either direction.
+hazard_classes:
+  max_speed_increase:
+    title: "Speed raised within an internally consistent configuration"
+    detail: >
+      EAL compares the controller's declared limits against the downstream
+      clamp. A speed increase applied to both keeps them in agreement and is not
+      examined. Nothing relates speed to braking capability, sensor range, or
+      stopping distance.
+
+  stopping_region_reduction:
+    title: "Reduced sensing range or clearance margin"
+    detail: >
+      Sensor marking range, raytrace range, and inflation radius are extracted
+      but no check consumes them. A robot configured so that it cannot detect an
+      obstacle in time to stop produces no finding.
+
+  latency_increase:
+    title: "Slower control or perception loop"
+    detail: >
+      Control frequency, costmap update rate, transform tolerance, and source
+      timeouts are extracted as timing parameters but are never related to the
+      speed the robot is permitted to travel. Sensor and actuator latency are
+      absent from Nav2 configuration entirely and are not modelled at all.
+
+  min_decel_reduction:
+    title: "Weakened braking within an internally consistent configuration"
+    detail: >
+      As with speed: a deceleration limit lowered on both the controller and the
+      smoother keeps them in agreement. Stopping distance is not modelled, so a
+      coherent reduction in braking authority is invisible.
+
+  unit_mismatch:
+    title: "Unit errors applied consistently"
+    detail: >
+      A unit conversion mistake made on both sides of a comparison is
+      arithmetically coherent. EAL has no notion of a plausible magnitude for a
+      physical quantity, so it cannot tell metres from feet or radians from
+      degrees.
+
+  missing_parameter:
+    title: "An entire configuration section absent"
+    detail: >
+      A missing individual limit is reported as an incomplete comparison. A
+      missing whole section, such as no velocity smoother at all, is treated as
+      the check being inapplicable rather than unknown. That judgement is
+      arguable and is recorded here so it stays visible.
+
+  conflicting_definitions:
+    title: "Contradictory definitions in unexamined locations"
+    detail: >
+      Duplicate keys in one mapping are detected. A second controller plugin
+      block with contradictory limits is not: the importer resolves the first
+      plugin entry and never inspects alternatives.
+
+  false_safety_assumption:
+    title: "Physically implausible declared capability"
+    detail: >
+      EAL checks that declarations agree with each other, never that any of them
+      is achievable. A platform declaring roughly ten g of braking, or zero
+      actuation delay alongside a half-second control loop, is accepted without
+      comment.
+
 mutations:
 
   # ── 1. Maximum speed increase ──────────────────────────────────────────────

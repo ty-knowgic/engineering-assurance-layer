@@ -316,7 +316,7 @@ def test_real_params_reach_the_ir_with_provenance(filename, minimal_spec, tmp_pa
         assert c["source_ref"]["file"].endswith(filename)
         assert c["source_ref"]["section"]
         assert c["numeric_value"] is not None
-    assert findings["analysis_status"] == "COMPLETE"
+    assert findings["analysis_status"] == "INPUTS_FULLY_READ"
     assert any(e["name"] == "nav2_stack" for e in ir["entities"])
 
 
@@ -334,7 +334,7 @@ def test_unknown_plugin_yields_unknown_not_pass(minimal_spec, tmp_path):
         "--policy-profile", "ci", tmp_path / "out",
     )
     assert exit_code == 3
-    assert findings["analysis_status"] == "INCOMPLETE"
+    assert findings["analysis_status"] == "INPUTS_NOT_FULLY_READ"
     gap = next(
         g for g in findings["coverage_gaps"]
         if g["category"] == "UNSUPPORTED_INPUT_CONSTRUCT"

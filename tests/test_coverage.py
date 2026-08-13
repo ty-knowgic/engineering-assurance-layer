@@ -74,20 +74,20 @@ def test_real_nav2_tree_never_reports_pass(tree_name, bare_spec, tmp_path):
     )
 
     assert exit_code == 3, f"{tree_name}: expected UNKNOWN exit 3, got {exit_code}"
-    assert findings["status"] == "analysis_incomplete"
-    assert findings["analysis_status"] == "INCOMPLETE"
+    assert findings["status"] == "inputs_not_fully_read"
+    assert findings["analysis_status"] == "INPUTS_NOT_FULLY_READ"
     assert findings["coverage_gap_count"] >= 1
     assert metadata["results"]["status"] == "UNKNOWN"
     assert metadata["gate"]["result"] == "UNKNOWN"
     assert metadata["gate"]["exit_reason"] == "ANALYSIS_COVERAGE_INCOMPLETE"
-    assert metadata["coverage"]["analysis_status"] == "INCOMPLETE"
+    assert metadata["coverage"]["analysis_status"] == "INPUTS_NOT_FULLY_READ"
 
     # The gap must reach SARIF, not just the human-readable summary.
     coverage_results = [
         r for r in sarif["runs"][0]["results"] if r["ruleId"].startswith("EAL_COVERAGE_")
     ]
     assert coverage_results, f"{tree_name}: no coverage gap in SARIF"
-    assert sarif["runs"][0]["invocations"][0]["properties"]["analysisStatus"] == "INCOMPLETE"
+    assert sarif["runs"][0]["invocations"][0]["properties"]["analysisStatus"] == "INPUTS_NOT_FULLY_READ"
 
 
 def test_nav2_unsupported_nodes_are_named_not_just_counted(bare_spec, tmp_path):
@@ -116,7 +116,7 @@ def test_local_profile_reports_unknown_but_does_not_block(bare_spec, tmp_path):
         tmp_path / "out",
     )
     assert exit_code == 0
-    assert findings["analysis_status"] == "INCOMPLETE"
+    assert findings["analysis_status"] == "INPUTS_NOT_FULLY_READ"
     assert metadata["results"]["status"] == "UNKNOWN"
     assert metadata["gate"]["result"] == "UNKNOWN"
 
@@ -161,9 +161,9 @@ def test_curated_examples_stay_complete(name, tmp_path):
     if code.exists():
         args += ["--code", code]
     _, findings, metadata, _ = _review(*args, tmp_path / "out")
-    assert findings["analysis_status"] == "COMPLETE"
+    assert findings["analysis_status"] == "INPUTS_FULLY_READ"
     assert findings["coverage_gap_count"] == 0
-    assert metadata["results"]["status"] in ("PASS", "REVIEW_REQUIRED")
+    assert metadata["results"]["status"] in ("NO_FINDINGS_IN_SCOPE", "REVIEW_REQUIRED")
 
 
 def test_supported_bt_fixture_stays_complete(tmp_path):
@@ -172,7 +172,7 @@ def test_supported_bt_fixture_stays_complete(tmp_path):
     _, findings, _, _ = _review(
         "--spec", ex / "spec.md", "--bt-xml", ex / "tree.xml", tmp_path / "out"
     )
-    assert findings["analysis_status"] == "COMPLETE"
+    assert findings["analysis_status"] == "INPUTS_FULLY_READ"
 
 
 # ── Detection rules that do not need a real tree ──────────────────────────────
@@ -201,7 +201,7 @@ def test_code_file_yielding_nothing_is_unknown(tmp_path):
     code = tmp_path / "controller.py"
     code.write_text('"""No numeric content at all."""\n\n\ndef run(x):\n    return x\n')
     _, findings, _, _ = _review("--spec", spec, "--code", code, tmp_path / "out")
-    assert findings["analysis_status"] == "INCOMPLETE"
+    assert findings["analysis_status"] == "INPUTS_NOT_FULLY_READ"
     assert any(
         g["category"] == "INPUT_YIELDED_NO_CONTENT" for g in findings["coverage_gaps"]
     )
@@ -298,10 +298,10 @@ def test_gap_ids_are_deterministic():
 
 
 def test_analysis_status_mapping():
-    assert analysis_status([]) is AnalysisStatus.COMPLETE
+    assert analysis_status([]) is AnalysisStatus.INPUTS_FULLY_READ
     assert analysis_status([
         CoverageGap(
             id="U-001", category=CoverageGapCategory.NO_ANALYZABLE_CONTENT,
             title="t", summary="s",
         )
-    ]) is AnalysisStatus.INCOMPLETE
+    ]) is AnalysisStatus.INPUTS_NOT_FULLY_READ

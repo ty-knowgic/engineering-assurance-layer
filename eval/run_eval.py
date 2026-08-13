@@ -127,7 +127,7 @@ def judge(mutation: dict, baseline: dict, actual: dict) -> dict:
     outcome = expect["outcome"]
     new_signatures = sorted(set(actual.get("signatures", [])) - set(baseline["signatures"]))
     new_categories = sorted({s.split("|", 1)[0] for s in new_signatures})
-    incomplete = actual.get("analysis_status") == "INCOMPLETE"
+    incomplete = actual.get("analysis_status") == "INPUTS_NOT_FULLY_READ"
     said_something = bool(new_signatures) or incomplete
 
     if actual.get("crashed"):
@@ -141,7 +141,7 @@ def judge(mutation: dict, baseline: dict, actual: dict) -> dict:
             verdict, detail = "DETECTED", "all expected categories present"
     elif outcome == "UNKNOWN":
         verdict = "DETECTED" if incomplete else "MISSED"
-        detail = "analysis_status INCOMPLETE" if incomplete else "stayed COMPLETE"
+        detail = ("inputs not fully read" if incomplete else "reported inputs fully read")
     elif outcome == "MISS":
         verdict = "SILENT_AS_EXPECTED" if not said_something else "DETECTED_UNEXPECTEDLY"
         detail = "nothing fired" if not said_something else f"fired: {new_categories}"
@@ -336,7 +336,7 @@ def write_report(catalogue: dict, baselines: dict, results: list[dict]) -> None:
     ]
     for r in results:
         said = ", ".join(f"`{c}`" for c in r["new_categories"]) or (
-            "UNKNOWN" if r["analysis_status"] == "INCOMPLETE" else "_silent_"
+            "UNKNOWN" if r["analysis_status"] == "INPUTS_NOT_FULLY_READ" else "_silent_"
         )
         lines.append(
             f"| {r['id']} | {r['category']} | {r['hazard']} | {r['expected']} | "

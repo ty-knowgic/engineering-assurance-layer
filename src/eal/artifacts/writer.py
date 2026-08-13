@@ -26,6 +26,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+from eal import hazards
 from eal.coverage import CoverageGap
 from eal.findings.schema import (
     Finding,
@@ -116,17 +117,23 @@ def _write_review_summary(
     low = len(by_sev["LOW"])
 
     incomplete = bool(coverage_gaps)
-    # UNKNOWN outranks both PASS and REVIEW REQUIRED: an incomplete analysis has
-    # not earned the right to make either statement.
+    # UNKNOWN outranks the other verdicts: an incomplete analysis has not earned
+    # the right to make any statement about the input.
     if incomplete:
         review_status = "UNKNOWN"
         gate_status = "UNKNOWN"
         status_icon = "⚠️ "
     else:
-        review_status = "PASS" if critical == 0 and high == 0 else "REVIEW REQUIRED"
-        gate_status = "FAIL" if gate_failed else "PASS"
-        status_icon = "✅ " if review_status == "PASS" else "❌ "
-    gate_icon = {"PASS": "✅ PASS", "FAIL": "❌ FAIL", "UNKNOWN": "⚠️ UNKNOWN"}[gate_status]
+        review_status = (
+            "NO FINDINGS IN SCOPE" if critical == 0 and high == 0 else "REVIEW REQUIRED"
+        )
+        gate_status = "THRESHOLD EXCEEDED" if gate_failed else "BELOW THRESHOLD"
+        status_icon = "○ " if review_status == "NO FINDINGS IN SCOPE" else "❌ "
+    gate_icon = {
+        "BELOW THRESHOLD": "○ BELOW THRESHOLD",
+        "THRESHOLD EXCEEDED": "❌ THRESHOLD EXCEEDED",
+        "UNKNOWN": "⚠️ UNKNOWN",
+    }[gate_status]
     displayed_findings = [
         f for f in findings if meets_or_exceeds_threshold(f.severity.value, min_severity)
     ]
@@ -209,6 +216,38 @@ def _write_review_summary(
         lines += ["", "## Extraction Warnings", ""]
         for w in ir.extraction_warnings:
             lines.append(f"- ⚠️  {w}")
+
+    # Always emitted, including on a clean run. A result with no findings is
+    # silent about everything below, and unless that silence is stated it reads
+    # as coverage.
+    register = hazards.unchecked_hazards()
+    classes = register.get("classes", [])
+    if classes:
+        measured = register.get("measured", {})
+        lines += [
+            "",
+            "## What was NOT checked",
+            "",
+            f"**{register.get('statement', '')}**",
+            "",
+            f"Measured by adversarial evaluation: EAL detected "
+            f"{measured.get('detected', '?')} of {measured.get('hazardous_mutations', '?')} "
+            f"mutations that introduce a real hazard. "
+            f"{measured.get('undetected', '?')} went undetected, in these classes:",
+            "",
+        ]
+        for c in classes:
+            lines += [
+                f"- **{c['title']}** (`{c['id']}`, worst observed hazard: "
+                f"{c.get('worst_hazard', 'unknown')})  ",
+                f"  {c['detail']}",
+            ]
+        lines += [
+            "",
+            "A result of no findings above means the checks that ran found nothing. "
+            "It is not a statement that the configuration is safe, and it says "
+            "nothing at all about any class listed here.",
+        ]
 
     if displayed_findings:
         lines += ["", "## Top Findings", ""]
@@ -409,11 +448,11 @@ def _write_findings(
     analysis_status: str,
 ) -> None:
     if coverage_gaps:
-        status = "analysis_incomplete"
+        status = "inputs_not_fully_read"
     elif findings:
         status = "findings_present"
     else:
-        status = "no_findings"
+        status = "no_findings_in_scope"
     payload = {
         "finding_count": len(findings),
         # `status` is the single field a CI script is most likely to read, so it
@@ -423,6 +462,9 @@ def _write_findings(
         "coverage_gap_count": len(coverage_gaps),
         "findings": [f.model_dump(mode="json") for f in findings],
         "coverage_gaps": [g.model_dump(mode="json") for g in coverage_gaps],
+        # Emitted on every run, clean or not: a consumer reading only this file
+        # must be able to see what the absence of findings does not cover.
+        "unchecked_hazards": hazards.register_summary(),
     }
     (out / "findings.json").write_text(
         json.dumps(payload, indent=2), encoding="utf-8"
@@ -444,10 +486,15 @@ def _write_html_report(
 
     if coverage_gaps:
         status_color = "#ef6c00"
-        status_text = "UNKNOWN — ANALYSIS COVERAGE INCOMPLETE"
+        status_text = "UNKNOWN — SOME INPUT COULD NOT BE READ"
+    elif critical or high:
+        status_color = "#d32f2f"
+        status_text = "REVIEW REQUIRED"
     else:
-        status_color = "#d32f2f" if (critical or high) else "#2e7d32"
-        status_text = "REVIEW REQUIRED" if (critical or high) else "PASS"
+        # Deliberately not green and deliberately not the word "pass": the only
+        # claim being made is that the checks that ran found nothing.
+        status_color = "#455a64"
+        status_text = "NO FINDINGS IN SCOPE"
 
     coverage_html = ""
     if coverage_gaps:
@@ -501,6 +548,29 @@ def _write_html_report(
             "</table>"
         )
 
+    register = hazards.unchecked_hazards()
+    unchecked_html = ""
+    if register.get("classes"):
+        measured = register.get("measured", {})
+        items = "".join(
+            f"<li><strong>{c['title']}</strong> "
+            f"<small>(worst observed hazard: {c.get('worst_hazard', 'unknown')})</small>"
+            f"<br>{c['detail']}</li>\n"
+            for c in register["classes"]
+        )
+        unchecked_html = (
+            '<h2>What was NOT checked</h2>\n'
+            '<div style="background:#eceff1;border-left:5px solid #455a64;padding:1rem">\n'
+            f"<p><strong>{register.get('statement','')}</strong></p>\n"
+            f"<p>Measured by adversarial evaluation: EAL detected "
+            f"{measured.get('detected','?')} of {measured.get('hazardous_mutations','?')} "
+            f"mutations introducing a real hazard; {measured.get('undetected','?')} went "
+            f"undetected, in these classes:</p>\n"
+            f"<ul>{items}</ul>\n"
+            "<p>A result of no findings means the checks that ran found nothing. It is "
+            "<strong>not</strong> a statement that the configuration is safe.</p>\n</div>\n"
+        )
+
     html = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -525,6 +595,7 @@ def _write_html_report(
 <p class="status">{status_text}</p>
 
 {coverage_html}
+{unchecked_html}
 <h2>Summary</h2>
 <div class="stat"><strong style="color:#d32f2f">{critical}</strong>CRITICAL</div>
 <div class="stat"><strong style="color:#f57c00">{high}</strong>HIGH</div>
@@ -576,8 +647,10 @@ def _write_run_metadata(
         results_status = "UNKNOWN"
         gate_result = "UNKNOWN"
     else:
-        results_status = "REVIEW_REQUIRED" if (critical_count or high_count) else "PASS"
-        gate_result = "FAIL" if gate_failed else "PASS"
+        results_status = (
+            "REVIEW_REQUIRED" if (critical_count or high_count) else "NO_FINDINGS_IN_SCOPE"
+        )
+        gate_result = "THRESHOLD_EXCEEDED" if gate_failed else "BELOW_THRESHOLD"
     payload = {
         "run_id": run_id,
         "eal_version": __version__,
@@ -601,9 +674,10 @@ def _write_run_metadata(
             "gap_count": len(coverage_gaps),
             "gaps": [g.model_dump(mode="json") for g in coverage_gaps],
             "notes": (
-                "analysis_status=INCOMPLETE means part of the supplied input was not "
-                "analyzed. Finding counts describe the analyzed portion only."
+                "analysis_status=INPUTS_NOT_FULLY_READ means part of the supplied input "
+                "could not be read. Finding counts describe the analyzed portion only."
             ),
+            "unchecked_hazards": hazards.register_summary(),
         },
         "gate": {
             "fail_on_severity": fail_on_severity,
@@ -661,7 +735,7 @@ def write_artifacts(
     gate_failed: bool = False,
     exit_reason: str = "REVIEW_COMPLETED",
     coverage_gaps: Optional[list[CoverageGap]] = None,
-    analysis_status: str = "COMPLETE",
+    analysis_status: str = "INPUTS_FULLY_READ",
     fail_on_unknown: bool = True,
 ) -> None:
     """Write all review artifacts to out_dir. Directory must already exist."""

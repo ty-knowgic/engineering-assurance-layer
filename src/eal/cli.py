@@ -16,6 +16,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from eal import hazards
 from eal.policy import resolve_policy
 
 app = typer.Typer(
@@ -265,7 +266,10 @@ def review(
         )
 
     overall_ok = by_sev["CRITICAL"] == 0 and by_sev["HIGH"] == 0
-    review_status = "UNKNOWN" if analysis_incomplete else ("PASS" if overall_ok else "REVIEW REQUIRED")
+    review_status = (
+        "UNKNOWN" if analysis_incomplete
+        else ("NO FINDINGS IN SCOPE" if overall_ok else "REVIEW REQUIRED")
+    )
     gate_failed = exit_code == 2
 
     console.print(f"\nHighest severity found: [bold]{highest_found}[/bold]")
@@ -279,12 +283,32 @@ def review(
 
     if analysis_incomplete:
         console.print(
-            "[bold yellow]Gate result: UNKNOWN (analysis coverage incomplete).[/bold yellow]"
+            "[bold yellow]Gate result: UNKNOWN (some input could not be read).[/bold yellow]"
         )
     elif gate_failed:
-        console.print("[bold red]Gate result: FAIL (severity threshold exceeded).[/bold red]")
+        console.print("[bold red]Gate result: THRESHOLD EXCEEDED.[/bold red]")
     else:
-        console.print("[bold green]Gate result: PASS.[/bold green]")
+        # Not green, and not the word "pass". The only claim is that the checks
+        # which ran found nothing at or above the threshold.
+        console.print("[bold]Gate result: BELOW THRESHOLD.[/bold]")
+
+    # Printed on every run, especially the quiet ones.
+    register = hazards.unchecked_hazards()
+    classes = register.get("classes", [])
+    if classes:
+        measured = register.get("measured", {})
+        console.print(
+            f"\n[bold]Not checked by this tool[/bold] — "
+            f"{measured.get('undetected', '?')} of "
+            f"{measured.get('hazardous_mutations', '?')} known hazardous configuration "
+            f"changes go undetected, in {len(classes)} class(es):"
+        )
+        for c in classes:
+            console.print(f"  [dim]•[/dim] {c['title']} [dim]({c.get('worst_hazard')})[/dim]")
+        console.print(
+            "  [dim]No findings above means the checks that ran found nothing. "
+            "It is not a statement that this configuration is safe.[/dim]"
+        )
 
     console.print(f"\nArtifacts written to: [cyan]{out.resolve()}[/cyan]")
     console.print(f"  → [link={out.resolve() / 'report.html'}]report.html[/link]")

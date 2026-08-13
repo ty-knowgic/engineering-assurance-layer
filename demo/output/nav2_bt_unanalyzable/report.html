@@ -19,7 +19,7 @@
 <body>
 <h1>Engineering Assurance Review</h1>
 <p>Run ID: <code>eal-DEMO-NORMALIZED</code> &nbsp;|&nbsp; Generated: 1970-01-01T00:00:00+00:00</p>
-<p class="status">UNKNOWN — ANALYSIS COVERAGE INCOMPLETE</p>
+<p class="status">UNKNOWN — SOME INPUT COULD NOT BE READ</p>
 
 <h2>⚠️ Analysis Coverage Incomplete</h2>
 <div style="background:#fff3e0;border-left:5px solid #ef6c00;padding:1rem">
@@ -27,6 +27,22 @@
 <ul><li><strong>U-001 — BehaviorTree XML contains 7 unmodelled node type(s)</strong><br><small><code>UNSUPPORTED_INPUT_CONSTRUCT</code> &middot; <code>tests/fixtures/nav2_upstream_bt/navigate_to_pose_w_replanning_and_recovery.xml</code></small><br>The BehaviorTree importer skipped node types it does not model: RecoveryNode, PipelineSequence, RateController, ReactiveSequence, Inverter, ReactiveFallback, RoundRobin. Control flow expressed through these nodes was not analyzed, so the absence of findings for those branches is not evidence of their correctness.<br><small>Unanalyzed: <code>RecoveryNode</code>, <code>PipelineSequence</code>, <code>RateController</code>, <code>ReactiveSequence</code>, <code>Inverter</code>, <code>ReactiveFallback</code>, <code>RoundRobin</code></small></li>
 <li><strong>U-002 — No analyzable content in merged IR</strong><br><small><code>NO_ANALYZABLE_CONTENT</code> &middot; <code>demo/spec/nav2_motion_limits.md</code></small><br>The merged IR contains no signals, constraints, or transitions. No deterministic rule or solver check could have fired. A zero-finding result here carries no assurance information.</li>
 </ul>
+</div>
+
+<h2>What was NOT checked</h2>
+<div style="background:#eceff1;border-left:5px solid #455a64;padding:1rem">
+<p><strong>Hazard classes EAL does not check. A review that reports no findings says nothing about any of these. Measured by the adversarial evaluation in eval/, not asserted.</strong></p>
+<p>Measured by adversarial evaluation: EAL detected 8 of 19 mutations introducing a real hazard; 11 went undetected, in these classes:</p>
+<ul><li><strong>Contradictory definitions in unexamined locations</strong> <small>(worst observed hazard: moderate)</small><br>Duplicate keys in one mapping are detected. A second controller plugin block with contradictory limits is not: the importer resolves the first plugin entry and never inspects alternatives.</li>
+<li><strong>Physically implausible declared capability</strong> <small>(worst observed hazard: severe)</small><br>EAL checks that declarations agree with each other, never that any of them is achievable. A platform declaring roughly ten g of braking, or zero actuation delay alongside a half-second control loop, is accepted without comment.</li>
+<li><strong>Slower control or perception loop</strong> <small>(worst observed hazard: severe)</small><br>Control frequency, costmap update rate, transform tolerance, and source timeouts are extracted as timing parameters but are never related to the speed the robot is permitted to travel. Sensor and actuator latency are absent from Nav2 configuration entirely and are not modelled at all.</li>
+<li><strong>Speed raised within an internally consistent configuration</strong> <small>(worst observed hazard: severe)</small><br>EAL compares the controller's declared limits against the downstream clamp. A speed increase applied to both keeps them in agreement and is not examined. Nothing relates speed to braking capability, sensor range, or stopping distance.</li>
+<li><strong>Weakened braking within an internally consistent configuration</strong> <small>(worst observed hazard: severe)</small><br>As with speed: a deceleration limit lowered on both the controller and the smoother keeps them in agreement. Stopping distance is not modelled, so a coherent reduction in braking authority is invisible.</li>
+<li><strong>An entire configuration section absent</strong> <small>(worst observed hazard: moderate)</small><br>A missing individual limit is reported as an incomplete comparison. A missing whole section, such as no velocity smoother at all, is treated as the check being inapplicable rather than unknown. That judgement is arguable and is recorded here so it stays visible.</li>
+<li><strong>Reduced sensing range or clearance margin</strong> <small>(worst observed hazard: severe)</small><br>Sensor marking range, raytrace range, and inflation radius are extracted but no check consumes them. A robot configured so that it cannot detect an obstacle in time to stop produces no finding.</li>
+<li><strong>Unit errors applied consistently</strong> <small>(worst observed hazard: moderate)</small><br>A unit conversion mistake made on both sides of a comparison is arithmetically coherent. EAL has no notion of a plausible magnitude for a physical quantity, so it cannot tell metres from feet or radians from degrees.</li>
+</ul>
+<p>A result of no findings means the checks that ran found nothing. It is <strong>not</strong> a statement that the configuration is safe.</p>
 </div>
 
 <h2>Summary</h2>

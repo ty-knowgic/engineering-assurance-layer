@@ -66,10 +66,10 @@ def test_summary_agrees_with_committed_artifacts():
         assert metadata["gate"]["result"] == scenario["gate_result"]
 
 
-def test_demo_covers_pass_fail_and_unknown():
+def test_demo_covers_all_three_gate_outcomes():
     """A demo that only shows failures does not demonstrate a usable gate."""
     outcomes = {s["gate_result"] for s in RESULTS["scenarios"]}
-    assert {"PASS", "FAIL", "UNKNOWN"} <= outcomes
+    assert {"BELOW_THRESHOLD", "THRESHOLD_EXCEEDED", "UNKNOWN"} <= outcomes
     exits = {s["exit_code"] for s in RESULTS["scenarios"]}
     assert {0, 2, 3} <= exits
 

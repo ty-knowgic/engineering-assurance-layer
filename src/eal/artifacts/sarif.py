@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from eal import hazards
 from eal.coverage import CoverageGap
 from eal.findings.schema import Finding, severity_rank
 
@@ -171,7 +172,7 @@ def _build_coverage_result(gap: CoverageGap) -> dict:
         "message": {"text": f"{gap.title} {gap.summary}".strip()},
         "properties": {
             "ealCoverageGapId": gap.id,
-            "analysisStatus": "INCOMPLETE",
+            "analysisStatus": "INPUTS_NOT_FULLY_READ",
             "unanalyzed_constructs": gap.unanalyzed_constructs,
         },
     }
@@ -199,8 +200,12 @@ def build_sarif_payload(
         # The tool itself ran fine; it is the analysis coverage that is partial.
         "executionSuccessful": True,
         "properties": {
-            "analysisStatus": "INCOMPLETE" if coverage_gaps else "COMPLETE",
+            "analysisStatus": ("INPUTS_NOT_FULLY_READ" if coverage_gaps else "INPUTS_FULLY_READ"),
             "coverageGapCount": len(coverage_gaps),
+            # Carried on every run, including clean ones. Emitted as invocation
+            # properties rather than results: these are not findings, and adding
+            # eight synthetic results per run would drown a code-scanning view.
+            "uncheckedHazards": hazards.register_summary(),
         },
     }
     if coverage_gaps:

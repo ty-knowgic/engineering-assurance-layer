@@ -92,9 +92,9 @@ The demo runs four scenarios and shows all three outcomes on real input:
 
 | Scenario | Input | Exit | Outcome |
 |----------|-------|------|---------|
-| `nav2_dwb_coherent` | `nav2_system_params.yaml` (DWB) | 0 | PASS, 0 findings |
-| `nav2_mppi_bringup` | `nav2_params.yaml` (MPPI) | 2 | FAIL, 3 findings |
-| `nav2_mppi_no_map` | `nav2_no_map_params.yaml` (MPPI) | 2 | FAIL, 6 findings |
+| `nav2_dwb_coherent` | `nav2_system_params.yaml` (DWB) | 0 | NO FINDINGS IN SCOPE |
+| `nav2_mppi_bringup` | `nav2_params.yaml` (MPPI) | 2 | THRESHOLD EXCEEDED, 3 findings |
+| `nav2_mppi_no_map` | `nav2_no_map_params.yaml` (MPPI) | 2 | THRESHOLD EXCEEDED, 6 findings |
 | `nav2_bt_unanalyzable` | `navigate_to_pose_w_replanning_and_recovery.xml` | 3 | UNKNOWN |
 
 Results and the full artifact set for each are committed under
@@ -154,6 +154,35 @@ EAL has no model of stopping distance, latency, or physical plausibility, and no
 notion of what magnitude is reasonable for a quantity. It checks that
 declarations agree with each other and that one upstream-documented horizon rule
 holds. That is the entire envelope.
+
+### Why this is printed on every run
+
+A narrow tool that stays quiet is not merely incomplete — it can actively
+mislead. Take the flagship Nav2 config, cut the sensor marking range to 0.4 m so
+the robot cannot see far enough to stop, then apply exactly the fix EAL
+recommends for the acceleration mismatch. The result was `0 findings`, `PASS`,
+`exit 0`. EAL had directed attention to an unrelated issue and rewarded
+resolving it with a green light.
+
+So the register above is emitted with **every** review — in `findings.json`,
+`run_metadata.json`, SARIF invocation properties, `review_summary.md`,
+`report.html`, and on the terminal — and most importantly on runs with no
+findings, which are exactly the runs that would otherwise read as reassurance.
+Its contents are generated from the measured evaluation results
+(`make hazard-register`), so it cannot claim blind spots that were fixed or hide
+ones that remain; a test asserts the shipped register matches what the committed
+results imply.
+
+The output vocabulary was changed for the same reason. Nothing says `PASS`:
+
+| Old | Now | Because |
+|-----|-----|---------|
+| `results.status: PASS` | `NO_FINDINGS_IN_SCOPE` | The checks that ran found nothing. That is not "safe". |
+| `gate.result: PASS` / `FAIL` | `BELOW_THRESHOLD` / `THRESHOLD_EXCEEDED` | A gate reports a threshold, not a verdict on the system. |
+| `analysis_status: COMPLETE` | `INPUTS_FULLY_READ` | It only ever meant the parser consumed its inputs. |
+
+EAL cannot find hazards nobody declared. It can refuse to let its silence be
+mistaken for coverage.
 
 ---
 

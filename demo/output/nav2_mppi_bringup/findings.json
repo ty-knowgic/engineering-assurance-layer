@@ -1,7 +1,7 @@
 {
   "finding_count": 3,
   "status": "findings_present",
-  "analysis_status": "COMPLETE",
+  "analysis_status": "INPUTS_FULLY_READ",
   "coverage_gap_count": 0,
   "findings": [
     {
@@ -68,5 +68,92 @@
       "counterexample": null
     }
   ],
-  "coverage_gaps": []
+  "coverage_gaps": [],
+  "unchecked_hazards": {
+    "statement": "Hazard classes EAL does not check. A review that reports no findings says nothing about any of these. Measured by the adversarial evaluation in eval/, not asserted.",
+    "measured": {
+      "hazardous_mutations": 19,
+      "detected": 8,
+      "undetected": 11,
+      "source": "eval/output/results.json"
+    },
+    "class_count": 8,
+    "classes": [
+      {
+        "id": "conflicting_definitions",
+        "title": "Contradictory definitions in unexamined locations",
+        "worst_hazard": "moderate",
+        "detail": "Duplicate keys in one mapping are detected. A second controller plugin block with contradictory limits is not: the importer resolves the first plugin entry and never inspects alternatives.",
+        "evidence": [
+          "M16"
+        ]
+      },
+      {
+        "id": "false_safety_assumption",
+        "title": "Physically implausible declared capability",
+        "worst_hazard": "severe",
+        "detail": "EAL checks that declarations agree with each other, never that any of them is achievable. A platform declaring roughly ten g of braking, or zero actuation delay alongside a half-second control loop, is accepted without comment.",
+        "evidence": [
+          "M22",
+          "M23"
+        ]
+      },
+      {
+        "id": "latency_increase",
+        "title": "Slower control or perception loop",
+        "worst_hazard": "severe",
+        "detail": "Control frequency, costmap update rate, transform tolerance, and source timeouts are extracted as timing parameters but are never related to the speed the robot is permitted to travel. Sensor and actuator latency are absent from Nav2 configuration entirely and are not modelled at all.",
+        "evidence": [
+          "M07",
+          "M08"
+        ]
+      },
+      {
+        "id": "max_speed_increase",
+        "title": "Speed raised within an internally consistent configuration",
+        "worst_hazard": "severe",
+        "detail": "EAL compares the controller's declared limits against the downstream clamp. A speed increase applied to both keeps them in agreement and is not examined. Nothing relates speed to braking capability, sensor range, or stopping distance.",
+        "evidence": [
+          "M03"
+        ]
+      },
+      {
+        "id": "min_decel_reduction",
+        "title": "Weakened braking within an internally consistent configuration",
+        "worst_hazard": "severe",
+        "detail": "As with speed: a deceleration limit lowered on both the controller and the smoother keeps them in agreement. Stopping distance is not modelled, so a coherent reduction in braking authority is invisible.",
+        "evidence": [
+          "M10"
+        ]
+      },
+      {
+        "id": "missing_parameter",
+        "title": "An entire configuration section absent",
+        "worst_hazard": "moderate",
+        "detail": "A missing individual limit is reported as an incomplete comparison. A missing whole section, such as no velocity smoother at all, is treated as the check being inapplicable rather than unknown. That judgement is arguable and is recorded here so it stays visible.",
+        "evidence": [
+          "M14"
+        ]
+      },
+      {
+        "id": "stopping_region_reduction",
+        "title": "Reduced sensing range or clearance margin",
+        "worst_hazard": "severe",
+        "detail": "Sensor marking range, raytrace range, and inflation radius are extracted but no check consumes them. A robot configured so that it cannot detect an obstacle in time to stop produces no finding.",
+        "evidence": [
+          "M05",
+          "M06"
+        ]
+      },
+      {
+        "id": "unit_mismatch",
+        "title": "Unit errors applied consistently",
+        "worst_hazard": "moderate",
+        "detail": "A unit conversion mistake made on both sides of a comparison is arithmetically coherent. EAL has no notion of a plausible magnitude for a physical quantity, so it cannot tell metres from feet or radians from degrees.",
+        "evidence": [
+          "M12"
+        ]
+      }
+    ]
+  }
 }

@@ -1,0 +1,105 @@
+# GENERATED FILE — do not edit by hand.
+# Regenerate with: make hazard-register
+#
+# Derived from eval/mutations.yaml and the measured results in
+# eval/output/results.json. A hazard class is listed here only while at
+# least one moderate-or-severe mutation in that class still goes
+# undetected. This register is emitted with every review run.
+statement: Hazard classes EAL does not check. A review that reports no findings says nothing
+  about any of these. Measured by the adversarial evaluation in eval/, not asserted.
+measured:
+  hazardous_mutations: 19
+  detected: 8
+  undetected: 11
+  source: eval/output/results.json
+classes:
+- id: conflicting_definitions
+  title: Contradictory definitions in unexamined locations
+  detail: 'Duplicate keys in one mapping are detected. A second controller plugin block with
+    contradictory limits is not: the importer resolves the first plugin entry and never inspects
+    alternatives.'
+  worst_hazard: moderate
+  evidence:
+  - mutation: M16
+    hazard: moderate
+    case: Second controller plugin block with contradictory limits
+- id: false_safety_assumption
+  title: Physically implausible declared capability
+  detail: EAL checks that declarations agree with each other, never that any of them is achievable.
+    A platform declaring roughly ten g of braking, or zero actuation delay alongside a half-second
+    control loop, is accepted without comment.
+  worst_hazard: severe
+  evidence:
+  - mutation: M22
+    hazard: severe
+    case: Smoother claims 100 m/s^2 braking capability
+  - mutation: M23
+    hazard: severe
+    case: Zero modelled actuation delay asserted alongside a 2 Hz control loop
+- id: latency_increase
+  title: Slower control or perception loop
+  detail: Control frequency, costmap update rate, transform tolerance, and source timeouts
+    are extracted as timing parameters but are never related to the speed the robot is permitted
+    to travel. Sensor and actuator latency are absent from Nav2 configuration entirely and
+    are not modelled at all.
+  worst_hazard: severe
+  evidence:
+  - mutation: M07
+    hazard: severe
+    case: controller_frequency 20 Hz -> 2 Hz
+  - mutation: M08
+    hazard: moderate
+    case: Local costmap update_frequency 5 Hz -> 0.5 Hz
+- id: max_speed_increase
+  title: Speed raised within an internally consistent configuration
+  detail: EAL compares the controller's declared limits against the downstream clamp. A speed
+    increase applied to both keeps them in agreement and is not examined. Nothing relates
+    speed to braking capability, sensor range, or stopping distance.
+  worst_hazard: severe
+  evidence:
+  - mutation: M03
+    hazard: severe
+    case: DWB speed raised coherently, 0.26 -> 2.0 on controller and smoother
+- id: min_decel_reduction
+  title: Weakened braking within an internally consistent configuration
+  detail: 'As with speed: a deceleration limit lowered on both the controller and the smoother
+    keeps them in agreement. Stopping distance is not modelled, so a coherent reduction in
+    braking authority is invisible.'
+  worst_hazard: severe
+  evidence:
+  - mutation: M10
+    hazard: severe
+    case: Braking weakened coherently on both sides, 3.0/2.5 -> 0.4
+- id: missing_parameter
+  title: An entire configuration section absent
+  detail: A missing individual limit is reported as an incomplete comparison. A missing whole
+    section, such as no velocity smoother at all, is treated as the check being inapplicable
+    rather than unknown. That judgement is arguable and is recorded here so it stays visible.
+  worst_hazard: moderate
+  evidence:
+  - mutation: M14
+    hazard: moderate
+    case: Entire velocity_smoother section removed
+- id: stopping_region_reduction
+  title: Reduced sensing range or clearance margin
+  detail: Sensor marking range, raytrace range, and inflation radius are extracted but no
+    check consumes them. A robot configured so that it cannot detect an obstacle in time to
+    stop produces no finding.
+  worst_hazard: severe
+  evidence:
+  - mutation: M05
+    hazard: severe
+    case: Sensor marking range obstacle_max_range 2.5 -> 0.4 m (local costmap)
+  - mutation: M06
+    hazard: moderate
+    case: Inflation radius 0.70 -> 0.05 m
+- id: unit_mismatch
+  title: Unit errors applied consistently
+  detail: A unit conversion mistake made on both sides of a comparison is arithmetically coherent.
+    EAL has no notion of a plausible magnitude for a physical quantity, so it cannot tell
+    metres from feet or radians from degrees.
+  worst_hazard: moderate
+  evidence:
+  - mutation: M12
+    hazard: moderate
+    case: Angular limits converted to deg/s on both sides consistently

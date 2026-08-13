@@ -45,8 +45,17 @@ class CoverageGapCategory(str, Enum):
 
 
 class AnalysisStatus(str, Enum):
-    COMPLETE = "COMPLETE"
-    INCOMPLETE = "INCOMPLETE"
+    """
+    Whether every supplied input could be read.
+
+    Deliberately not named COMPLETE/INCOMPLETE. "Analysis complete" reads as
+    "the analysis is finished and nothing is left to worry about", when all it
+    ever meant was that the parser managed to consume its inputs. The names say
+    what is actually being reported.
+    """
+
+    INPUTS_FULLY_READ = "INPUTS_FULLY_READ"
+    INPUTS_NOT_FULLY_READ = "INPUTS_NOT_FULLY_READ"
 
 
 class CoverageGap(BaseModel):
@@ -74,7 +83,10 @@ def assign_gap_ids(gaps: list[CoverageGap]) -> list[CoverageGap]:
 
 
 def analysis_status(gaps: list[CoverageGap]) -> AnalysisStatus:
-    return AnalysisStatus.INCOMPLETE if gaps else AnalysisStatus.COMPLETE
+    return (
+        AnalysisStatus.INPUTS_NOT_FULLY_READ if gaps
+        else AnalysisStatus.INPUTS_FULLY_READ
+    )
 
 
 def detect_coverage_gaps(
