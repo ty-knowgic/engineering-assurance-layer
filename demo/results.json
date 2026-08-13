@@ -1,0 +1,106 @@
+{
+  "upstream": {
+    "repository": "https://github.com/ros-navigation/navigation2",
+    "commit": "075b29611a7d21ff4f1c74077a17c672e708001c",
+    "commit_date": "2026-08-13T16:11:49Z",
+    "retrieved": "2026-08-13",
+    "license": "Apache-2.0"
+  },
+  "scenarios": [
+    {
+      "scenario": "nav2_dwb_coherent",
+      "description": "Upstream DWB config: controller and smoother limits agree",
+      "command": "eal review --spec demo/spec/nav2_motion_limits.md --nav2-params tests/fixtures/nav2_upstream_params/nav2_system_params.yaml --policy-profile ci",
+      "exit_code": 0,
+      "outcome": "PASS",
+      "analysis_status": "COMPLETE",
+      "gate_result": "PASS",
+      "finding_count": 0,
+      "coverage_gap_count": 0,
+      "findings": []
+    },
+    {
+      "scenario": "nav2_mppi_bringup",
+      "description": "Upstream MPPI bringup config: acceleration limits disagree with smoother",
+      "command": "eal review --spec demo/spec/nav2_motion_limits.md --nav2-params tests/fixtures/nav2_upstream_params/nav2_params.yaml --policy-profile ci",
+      "exit_code": 2,
+      "outcome": "FAIL (severity gate)",
+      "analysis_status": "COMPLETE",
+      "gate_result": "FAIL",
+      "finding_count": 3,
+      "coverage_gap_count": 0,
+      "findings": [
+        {
+          "severity": "HIGH",
+          "category": "NAV2_ACCEL_OVERDECLARED",
+          "title": "Controller declares linear acceleration limit 1.20x the downstream smoother limit"
+        },
+        {
+          "severity": "HIGH",
+          "category": "NAV2_ACCEL_OVERDECLARED",
+          "title": "Controller declares linear deceleration limit 1.20x the downstream smoother limit"
+        },
+        {
+          "severity": "HIGH",
+          "category": "NAV2_ACCEL_OVERDECLARED",
+          "title": "Controller declares angular acceleration limit 1.09x the downstream smoother limit"
+        }
+      ]
+    },
+    {
+      "scenario": "nav2_mppi_no_map",
+      "description": "Upstream MPPI GPS config: acceleration and velocity limits disagree",
+      "command": "eal review --spec demo/spec/nav2_motion_limits.md --nav2-params tests/fixtures/nav2_upstream_params/nav2_no_map_params.yaml --policy-profile ci",
+      "exit_code": 2,
+      "outcome": "FAIL (severity gate)",
+      "analysis_status": "COMPLETE",
+      "gate_result": "FAIL",
+      "finding_count": 6,
+      "coverage_gap_count": 0,
+      "findings": [
+        {
+          "severity": "HIGH",
+          "category": "NAV2_ACCEL_OVERDECLARED",
+          "title": "Controller declares linear acceleration limit 1.20x the downstream smoother limit"
+        },
+        {
+          "severity": "HIGH",
+          "category": "NAV2_ACCEL_OVERDECLARED",
+          "title": "Controller declares linear deceleration limit 1.20x the downstream smoother limit"
+        },
+        {
+          "severity": "HIGH",
+          "category": "NAV2_ACCEL_OVERDECLARED",
+          "title": "Controller declares angular acceleration limit 1.09x the downstream smoother limit"
+        },
+        {
+          "severity": "MEDIUM",
+          "category": "NAV2_VELOCITY_OVERDECLARED",
+          "title": "Controller declares maximum forward velocity 1.92x the downstream smoother limit"
+        },
+        {
+          "severity": "MEDIUM",
+          "category": "NAV2_VELOCITY_OVERDECLARED",
+          "title": "Controller declares maximum reverse velocity 1.35x the downstream smoother limit"
+        },
+        {
+          "severity": "MEDIUM",
+          "category": "NAV2_VELOCITY_OVERDECLARED",
+          "title": "Controller declares maximum angular velocity 1.90x the downstream smoother limit"
+        }
+      ]
+    },
+    {
+      "scenario": "nav2_bt_unanalyzable",
+      "description": "Upstream Nav2 behavior tree: outside EAL's analysis envelope (UNKNOWN)",
+      "command": "eal review --spec demo/spec/nav2_motion_limits.md --bt-xml tests/fixtures/nav2_upstream_bt/navigate_to_pose_w_replanning_and_recovery.xml --policy-profile ci",
+      "exit_code": 3,
+      "outcome": "UNKNOWN (analysis coverage incomplete)",
+      "analysis_status": "INCOMPLETE",
+      "gate_result": "UNKNOWN",
+      "finding_count": 0,
+      "coverage_gap_count": 2,
+      "findings": []
+    }
+  ]
+}

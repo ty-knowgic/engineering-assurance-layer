@@ -1,0 +1,320 @@
+{
+  "spec_file": "demo/spec/nav2_motion_limits.md",
+  "model_file": "tests/fixtures/nav2_upstream_bt/navigate_to_pose_w_replanning_and_recovery.xml",
+  "code_files": [],
+  "entities": [
+    {
+      "name": "nav2_stack",
+      "description": "ROS 2 Nav2 navigation stack under review",
+      "source_ref": {
+        "file": "demo/spec/nav2_motion_limits.md",
+        "section": "Entities",
+        "line": 1,
+        "raw_text": null
+      }
+    },
+    {
+      "name": "bt_xml_slice",
+      "description": "Narrow BehaviorTree XML ingestion evidence",
+      "source_ref": {
+        "file": "tests/fixtures/nav2_upstream_bt/navigate_to_pose_w_replanning_and_recovery.xml",
+        "section": "entities",
+        "line": null,
+        "raw_text": null
+      }
+    }
+  ],
+  "signals": [],
+  "states": [
+    {
+      "name": "BACK_UP",
+      "description": "BT action leaf BackUp",
+      "source_ref": {
+        "file": "tests/fixtures/nav2_upstream_bt/navigate_to_pose_w_replanning_and_recovery.xml",
+        "section": "states",
+        "line": null,
+        "raw_text": null
+      }
+    },
+    {
+      "name": "CLEAR_GLOBAL_COSTMAP_CONTEXT",
+      "description": "BT action leaf ClearGlobalCostmap-Context",
+      "source_ref": {
+        "file": "tests/fixtures/nav2_upstream_bt/navigate_to_pose_w_replanning_and_recovery.xml",
+        "section": "states",
+        "line": null,
+        "raw_text": null
+      }
+    },
+    {
+      "name": "CLEAR_GLOBAL_COSTMAP_SUBTREE",
+      "description": "BT action leaf ClearGlobalCostmap-Subtree",
+      "source_ref": {
+        "file": "tests/fixtures/nav2_upstream_bt/navigate_to_pose_w_replanning_and_recovery.xml",
+        "section": "states",
+        "line": null,
+        "raw_text": null
+      }
+    },
+    {
+      "name": "CLEAR_LOCAL_COSTMAP_CONTEXT",
+      "description": "BT action leaf ClearLocalCostmap-Context",
+      "source_ref": {
+        "file": "tests/fixtures/nav2_upstream_bt/navigate_to_pose_w_replanning_and_recovery.xml",
+        "section": "states",
+        "line": null,
+        "raw_text": null
+      }
+    },
+    {
+      "name": "CLEAR_LOCAL_COSTMAP_SUBTREE",
+      "description": "BT action leaf ClearLocalCostmap-Subtree",
+      "source_ref": {
+        "file": "tests/fixtures/nav2_upstream_bt/navigate_to_pose_w_replanning_and_recovery.xml",
+        "section": "states",
+        "line": null,
+        "raw_text": null
+      }
+    },
+    {
+      "name": "COMPUTE_PATH_TO_POSE",
+      "description": "BT action leaf ComputePathToPose",
+      "source_ref": {
+        "file": "tests/fixtures/nav2_upstream_bt/navigate_to_pose_w_replanning_and_recovery.xml",
+        "section": "states",
+        "line": null,
+        "raw_text": null
+      }
+    },
+    {
+      "name": "CONTROLLER_SELECTOR",
+      "description": "BT action leaf ControllerSelector",
+      "source_ref": {
+        "file": "tests/fixtures/nav2_upstream_bt/navigate_to_pose_w_replanning_and_recovery.xml",
+        "section": "states",
+        "line": null,
+        "raw_text": null
+      }
+    },
+    {
+      "name": "FOLLOW_PATH",
+      "description": "BT action leaf FollowPath",
+      "source_ref": {
+        "file": "tests/fixtures/nav2_upstream_bt/navigate_to_pose_w_replanning_and_recovery.xml",
+        "section": "states",
+        "line": null,
+        "raw_text": null
+      }
+    },
+    {
+      "name": "GLOBAL_UPDATED_GOAL",
+      "description": "BT action leaf GlobalUpdatedGoal",
+      "source_ref": {
+        "file": "tests/fixtures/nav2_upstream_bt/navigate_to_pose_w_replanning_and_recovery.xml",
+        "section": "states",
+        "line": null,
+        "raw_text": null
+      }
+    },
+    {
+      "name": "GOAL_CHECKER_SELECTOR",
+      "description": "BT action leaf GoalCheckerSelector",
+      "source_ref": {
+        "file": "tests/fixtures/nav2_upstream_bt/navigate_to_pose_w_replanning_and_recovery.xml",
+        "section": "states",
+        "line": null,
+        "raw_text": null
+      }
+    },
+    {
+      "name": "GOAL_UPDATED",
+      "description": "BT action leaf GoalUpdated",
+      "source_ref": {
+        "file": "tests/fixtures/nav2_upstream_bt/navigate_to_pose_w_replanning_and_recovery.xml",
+        "section": "states",
+        "line": null,
+        "raw_text": null
+      }
+    },
+    {
+      "name": "IS_GOAL_NEARBY",
+      "description": "BT action leaf IsGoalNearby",
+      "source_ref": {
+        "file": "tests/fixtures/nav2_upstream_bt/navigate_to_pose_w_replanning_and_recovery.xml",
+        "section": "states",
+        "line": null,
+        "raw_text": null
+      }
+    },
+    {
+      "name": "PATH_HANDLER_SELECTOR",
+      "description": "BT action leaf PathHandlerSelector",
+      "source_ref": {
+        "file": "tests/fixtures/nav2_upstream_bt/navigate_to_pose_w_replanning_and_recovery.xml",
+        "section": "states",
+        "line": null,
+        "raw_text": null
+      }
+    },
+    {
+      "name": "PLANNER_SELECTOR",
+      "description": "BT action leaf PlannerSelector",
+      "source_ref": {
+        "file": "tests/fixtures/nav2_upstream_bt/navigate_to_pose_w_replanning_and_recovery.xml",
+        "section": "states",
+        "line": null,
+        "raw_text": null
+      }
+    },
+    {
+      "name": "PROGRESS_CHECKER_SELECTOR",
+      "description": "BT action leaf ProgressCheckerSelector",
+      "source_ref": {
+        "file": "tests/fixtures/nav2_upstream_bt/navigate_to_pose_w_replanning_and_recovery.xml",
+        "section": "states",
+        "line": null,
+        "raw_text": null
+      }
+    },
+    {
+      "name": "SPIN",
+      "description": "BT action leaf Spin",
+      "source_ref": {
+        "file": "tests/fixtures/nav2_upstream_bt/navigate_to_pose_w_replanning_and_recovery.xml",
+        "section": "states",
+        "line": null,
+        "raw_text": null
+      }
+    },
+    {
+      "name": "TRUNCATE_PATH_LOCAL",
+      "description": "BT action leaf TruncatePathLocal",
+      "source_ref": {
+        "file": "tests/fixtures/nav2_upstream_bt/navigate_to_pose_w_replanning_and_recovery.xml",
+        "section": "states",
+        "line": null,
+        "raw_text": null
+      }
+    },
+    {
+      "name": "VALIDATE_PATH",
+      "description": "BT action leaf ValidatePath",
+      "source_ref": {
+        "file": "tests/fixtures/nav2_upstream_bt/navigate_to_pose_w_replanning_and_recovery.xml",
+        "section": "states",
+        "line": null,
+        "raw_text": null
+      }
+    },
+    {
+      "name": "WAIT",
+      "description": "BT action leaf Wait",
+      "source_ref": {
+        "file": "tests/fixtures/nav2_upstream_bt/navigate_to_pose_w_replanning_and_recovery.xml",
+        "section": "states",
+        "line": null,
+        "raw_text": null
+      }
+    },
+    {
+      "name": "WOULD_A_CONTROLLER_RECOVERY_HELP",
+      "description": "BT action leaf WouldAControllerRecoveryHelp",
+      "source_ref": {
+        "file": "tests/fixtures/nav2_upstream_bt/navigate_to_pose_w_replanning_and_recovery.xml",
+        "section": "states",
+        "line": null,
+        "raw_text": null
+      }
+    },
+    {
+      "name": "WOULD_A_PLANNER_RECOVERY_HELP",
+      "description": "BT action leaf WouldAPlannerRecoveryHelp",
+      "source_ref": {
+        "file": "tests/fixtures/nav2_upstream_bt/navigate_to_pose_w_replanning_and_recovery.xml",
+        "section": "states",
+        "line": null,
+        "raw_text": null
+      }
+    }
+  ],
+  "modes": [],
+  "transitions": [],
+  "requirements": [
+    {
+      "id": "REQ-001",
+      "text": "Motion limits declared by the local controller must be achievable through the command chain that reaches the robot base.",
+      "parsed_signals": [],
+      "parsed_states": [],
+      "parsed_modes": [],
+      "requirement_classes": [],
+      "parsed_constraints": [],
+      "linkage_reasons": {},
+      "source_ref": {
+        "file": "demo/spec/nav2_motion_limits.md",
+        "section": "Requirements",
+        "line": 1,
+        "raw_text": null
+      }
+    },
+    {
+      "id": "REQ-002",
+      "text": "The trajectory prediction horizon must not reach past the edge of the local costmap the planner has data for.",
+      "parsed_signals": [],
+      "parsed_states": [],
+      "parsed_modes": [],
+      "requirement_classes": [],
+      "parsed_constraints": [],
+      "linkage_reasons": {},
+      "source_ref": {
+        "file": "demo/spec/nav2_motion_limits.md",
+        "section": "Requirements",
+        "line": 2,
+        "raw_text": null
+      }
+    }
+  ],
+  "constraints": [],
+  "assumptions": [
+    {
+      "id": "ASM-001",
+      "text": "The velocity_smoother is present in the cmd_vel chain and is the last stage that clamps commanded motion before the base controller.",
+      "assumption_type": "unclassified",
+      "source_ref": {
+        "file": "demo/spec/nav2_motion_limits.md",
+        "section": "Assumptions",
+        "line": 1,
+        "raw_text": null
+      }
+    },
+    {
+      "id": "ASM-MODEL-001",
+      "text": "BT Fallback 'FallbackComputePathToPose' uses primary 'GlobalUpdatedGoal' with alternate recovery path(s): ComputePathToPose.",
+      "assumption_type": "unclassified",
+      "source_ref": {
+        "file": "tests/fixtures/nav2_upstream_bt/navigate_to_pose_w_replanning_and_recovery.xml",
+        "section": "assumptions",
+        "line": null,
+        "raw_text": null
+      }
+    },
+    {
+      "id": "ASM-MODEL-002",
+      "text": "BT Fallback 'Fallback' uses primary 'WouldAControllerRecoveryHelp' with alternate recovery path(s): WouldAPlannerRecoveryHelp.",
+      "assumption_type": "unclassified",
+      "source_ref": {
+        "file": "tests/fixtures/nav2_upstream_bt/navigate_to_pose_w_replanning_and_recovery.xml",
+        "section": "assumptions",
+        "line": null,
+        "raw_text": null
+      }
+    }
+  ],
+  "code_constants": [],
+  "code_comparisons": [],
+  "code_evidence": [],
+  "extraction_warnings": [
+    "No signals found. Add a '## Signals' section to your spec.",
+    "No states found. Add a '## States' section to your spec.",
+    "BT XML importer ignored unsupported node(s): RecoveryNode, PipelineSequence, RateController, ReactiveSequence, Inverter, ReactiveFallback, RoundRobin"
+  ]
+}

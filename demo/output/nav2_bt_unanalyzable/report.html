@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>EAL Review Report — eal-DEMO-NORMALIZED</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 1100px; margin: 2rem auto; padding: 0 1rem; }
+  h1 { color: #1a1a2e; } h2 { color: #16213e; border-bottom: 1px solid #eee; }
+  .status { font-size: 1.4em; font-weight: bold; color: #ef6c00; }
+  table { border-collapse: collapse; width: 100%; }
+  th { background: #16213e; color: white; padding: 8px 12px; text-align: left; }
+  td { padding: 8px 12px; border-bottom: 1px solid #eee; vertical-align: top; font-size: 0.9em; }
+  tr:nth-child(even) { background: #f9f9f9; }
+  .stat { display: inline-block; margin: 0.5rem 1rem; padding: 0.5rem 1rem;
+           background: #f0f4f8; border-radius: 6px; text-align: center; }
+  .stat strong { display: block; font-size: 1.5em; }
+</style>
+</head>
+<body>
+<h1>Engineering Assurance Review</h1>
+<p>Run ID: <code>eal-DEMO-NORMALIZED</code> &nbsp;|&nbsp; Generated: 1970-01-01T00:00:00+00:00</p>
+<p class="status">UNKNOWN — ANALYSIS COVERAGE INCOMPLETE</p>
+
+<h2>⚠️ Analysis Coverage Incomplete</h2>
+<div style="background:#fff3e0;border-left:5px solid #ef6c00;padding:1rem">
+<p>EAL was asked to analyze input it could not fully model. The finding counts below describe only the analyzed portion. Absence of findings in the unanalyzed regions is <strong>not</strong> evidence of their correctness.</p>
+<ul><li><strong>U-001 — BehaviorTree XML contains 7 unmodelled node type(s)</strong><br><small><code>UNSUPPORTED_INPUT_CONSTRUCT</code> &middot; <code>tests/fixtures/nav2_upstream_bt/navigate_to_pose_w_replanning_and_recovery.xml</code></small><br>The BehaviorTree importer skipped node types it does not model: RecoveryNode, PipelineSequence, RateController, ReactiveSequence, Inverter, ReactiveFallback, RoundRobin. Control flow expressed through these nodes was not analyzed, so the absence of findings for those branches is not evidence of their correctness.<br><small>Unanalyzed: <code>RecoveryNode</code>, <code>PipelineSequence</code>, <code>RateController</code>, <code>ReactiveSequence</code>, <code>Inverter</code>, <code>ReactiveFallback</code>, <code>RoundRobin</code></small></li>
+<li><strong>U-002 — No analyzable content in merged IR</strong><br><small><code>NO_ANALYZABLE_CONTENT</code> &middot; <code>demo/spec/nav2_motion_limits.md</code></small><br>The merged IR contains no signals, constraints, or transitions. No deterministic rule or solver check could have fired. A zero-finding result here carries no assurance information.</li>
+</ul>
+</div>
+
+<h2>Summary</h2>
+<div class="stat"><strong style="color:#d32f2f">0</strong>CRITICAL</div>
+<div class="stat"><strong style="color:#f57c00">0</strong>HIGH</div>
+<div class="stat"><strong style="color:#fbc02d">0</strong>MEDIUM</div>
+<div class="stat"><strong style="color:#1976d2">0</strong>LOW</div>
+
+<h2>IR Extraction</h2>
+<p>Signals: 0 &nbsp;|&nbsp; States: 21 &nbsp;|&nbsp;
+Modes: 0 &nbsp;|&nbsp; Requirements: 2 &nbsp;|&nbsp;
+Constraints: 0 &nbsp;|&nbsp; Assumptions: 3</p>
+
+<h2>Findings (0)</h2>
+<p><em>No findings.</em></p>
+
+</body>
+</html>

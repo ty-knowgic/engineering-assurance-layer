@@ -10,9 +10,15 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from eal.coverage import CoverageGap
 from eal.findings.schema import Finding, severity_rank
 
 SARIF_FILE_NAME = "results.sarif"
+
+# Coverage gaps are emitted as SARIF results (not only as invocation
+# notifications) so they are visible in code-scanning UIs, which surface
+# results and routinely ignore notifications.
+COVERAGE_RULE_PREFIX = "EAL_COVERAGE_"
 
 
 _SEVERITY_TO_LEVEL = {
@@ -132,12 +138,81 @@ def _build_result(finding: Finding) -> dict:
     return result
 
 
-def build_sarif_payload(findings: list[Finding], run_id: str) -> dict:
-    """Build SARIF v2.1.0 payload from canonical findings."""
+def _coverage_rule_id(gap: CoverageGap) -> str:
+    return f"{COVERAGE_RULE_PREFIX}{gap.category.value}"
+
+
+def _build_coverage_rules(gaps: list[CoverageGap]) -> list[dict]:
+    by_rule: dict[str, CoverageGap] = {}
+    for gap in gaps:
+        by_rule.setdefault(_coverage_rule_id(gap), gap)
+    return [
+        {
+            "id": rule_id,
+            "name": rule_id,
+            "shortDescription": {"text": exemplar.title or rule_id},
+            "fullDescription": {
+                "text": (
+                    "Analysis coverage gap: EAL was asked to analyze input it could not "
+                    "fully model. Absence of findings in the affected region is not "
+                    "evidence of its correctness."
+                )
+            },
+            "defaultConfiguration": {"level": "warning"},
+        }
+        for rule_id, exemplar in sorted(by_rule.items())
+    ]
+
+
+def _build_coverage_result(gap: CoverageGap) -> dict:
+    result: dict = {
+        "ruleId": _coverage_rule_id(gap),
+        "level": "warning",
+        "message": {"text": f"{gap.title} {gap.summary}".strip()},
+        "properties": {
+            "ealCoverageGapId": gap.id,
+            "analysisStatus": "INCOMPLETE",
+            "unanalyzed_constructs": gap.unanalyzed_constructs,
+        },
+    }
+    if gap.affected_input:
+        result["locations"] = [
+            {"physicalLocation": {"artifactLocation": {"uri": gap.affected_input}}}
+        ]
+    return result
+
+
+def build_sarif_payload(
+    findings: list[Finding],
+    run_id: str,
+    coverage_gaps: list[CoverageGap] | None = None,
+) -> dict:
+    """Build SARIF v2.1.0 payload from canonical findings and coverage gaps."""
     from eal import __version__
 
-    rules = _build_rules(findings)
-    results = [_build_result(finding) for finding in findings]
+    coverage_gaps = coverage_gaps or []
+    rules = _build_rules(findings) + _build_coverage_rules(coverage_gaps)
+    results = [_build_result(f) for f in findings]
+    results += [_build_coverage_result(g) for g in coverage_gaps]
+
+    invocation: dict = {
+        # The tool itself ran fine; it is the analysis coverage that is partial.
+        "executionSuccessful": True,
+        "properties": {
+            "analysisStatus": "INCOMPLETE" if coverage_gaps else "COMPLETE",
+            "coverageGapCount": len(coverage_gaps),
+        },
+    }
+    if coverage_gaps:
+        invocation["toolExecutionNotifications"] = [
+            {
+                "level": "warning",
+                "message": {"text": f"{g.id} — {g.title}. {g.summary}"},
+                "descriptor": {"id": _coverage_rule_id(g)},
+            }
+            for g in coverage_gaps
+        ]
+
     return {
         "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
         "version": "2.1.0",
@@ -151,14 +226,20 @@ def build_sarif_payload(findings: list[Finding], run_id: str) -> dict:
                         "rules": rules,
                     }
                 },
+                "invocations": [invocation],
                 "results": results,
             }
         ],
     }
 
 
-def write_sarif_artifact(out_dir: Path, findings: list[Finding], run_id: str) -> str:
+def write_sarif_artifact(
+    out_dir: Path,
+    findings: list[Finding],
+    run_id: str,
+    coverage_gaps: list[CoverageGap] | None = None,
+) -> str:
     """Write SARIF artifact and return artifact file name."""
-    payload = build_sarif_payload(findings, run_id=run_id)
+    payload = build_sarif_payload(findings, run_id=run_id, coverage_gaps=coverage_gaps)
     (out_dir / SARIF_FILE_NAME).write_text(json.dumps(payload, indent=2), encoding="utf-8")
     return SARIF_FILE_NAME

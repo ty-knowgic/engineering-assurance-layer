@@ -19,12 +19,14 @@ Outputs:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
+from eal.coverage import CoverageGap
 from eal.findings.schema import (
     Finding,
     FindingCategory,
@@ -39,6 +41,22 @@ from eal.artifacts.sarif import write_sarif_artifact
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _file_digest(path: Optional[str]) -> Optional[dict]:
+    """SHA-256 of an input file, so a run can be tied to exact input bytes."""
+    if not path:
+        return None
+    try:
+        p = Path(path)
+        data = p.read_bytes()
+    except OSError:
+        return {"path": path, "sha256": None, "bytes": None, "error": "unreadable"}
+    return {
+        "path": path,
+        "sha256": hashlib.sha256(data).hexdigest(),
+        "bytes": len(data),
+    }
 
 
 def _git_info() -> dict:
@@ -88,6 +106,8 @@ def _write_review_summary(
     highest_severity_found: str,
     gate_failed: bool,
     sarif_file: str,
+    coverage_gaps: list[CoverageGap],
+    analysis_status: str,
 ) -> None:
     by_sev = _findings_by_severity(findings)
     critical = len(by_sev["CRITICAL"])
@@ -95,8 +115,18 @@ def _write_review_summary(
     medium = len(by_sev["MEDIUM"])
     low = len(by_sev["LOW"])
 
-    review_status = "PASS" if critical == 0 and high == 0 else "REVIEW REQUIRED"
-    gate_status = "FAIL" if gate_failed else "PASS"
+    incomplete = bool(coverage_gaps)
+    # UNKNOWN outranks both PASS and REVIEW REQUIRED: an incomplete analysis has
+    # not earned the right to make either statement.
+    if incomplete:
+        review_status = "UNKNOWN"
+        gate_status = "UNKNOWN"
+        status_icon = "⚠️ "
+    else:
+        review_status = "PASS" if critical == 0 and high == 0 else "REVIEW REQUIRED"
+        gate_status = "FAIL" if gate_failed else "PASS"
+        status_icon = "✅ " if review_status == "PASS" else "❌ "
+    gate_icon = {"PASS": "✅ PASS", "FAIL": "❌ FAIL", "UNKNOWN": "⚠️ UNKNOWN"}[gate_status]
     displayed_findings = [
         f for f in findings if meets_or_exceeds_threshold(f.severity.value, min_severity)
     ]
@@ -107,10 +137,12 @@ def _write_review_summary(
         f"**Run ID:** `{run_id}`",
         f"**Spec:** `{spec_file}`",
         f"**Generated:** {_now_iso()}",
-        f"**Review status:** {'✅ ' if review_status == 'PASS' else '❌ '}{review_status}",
+        f"**Review status:** {status_icon}{review_status}",
+        f"**Analysis status:** `{analysis_status}`",
+        f"**Coverage gaps:** `{len(coverage_gaps)}`",
         f"**Highest severity found:** `{highest_severity_found}`",
         f"**Gate threshold:** `{fail_on_severity}`",
-        f"**Gate result:** {'✅ PASS' if gate_status == 'PASS' else '❌ FAIL'}",
+        f"**Gate result:** {gate_icon}",
         f"**Policy profile:** `{policy_profile}`",
         f"**Presentation minimum severity:** `{min_severity}`",
         f"**Rule strictness:** `{strictness}`",
@@ -118,6 +150,37 @@ def _write_review_summary(
         f"**Strictness-suppressed findings:** `{suppressed_finding_count}`",
         f"**SARIF artifact:** `{sarif_file}`",
         "",
+    ]
+
+    if incomplete:
+        lines += [
+            "## ⚠️ Analysis Coverage Incomplete",
+            "",
+            "EAL was asked to analyze input it could not fully model. **The finding counts "
+            "below describe only the analyzed portion.** Absence of findings in the "
+            "unanalyzed regions is not evidence of their correctness.",
+            "",
+        ]
+        for g in coverage_gaps:
+            lines += [
+                f"### {g.id} — {g.title}",
+                "",
+                f"**Category:** `{g.category.value}`  ",
+                f"**Affected input:** `{g.affected_input}`  ",
+                "",
+                g.summary,
+                "",
+            ]
+            if g.unanalyzed_constructs:
+                lines += [
+                    "**Unanalyzed constructs:** "
+                    + ", ".join(f"`{c}`" for c in g.unanalyzed_constructs),
+                    "",
+                ]
+            if g.suggested_fix:
+                lines += [f"**Suggested fix:** {g.suggested_fix}", ""]
+
+    lines += [
         "## Findings Overview",
         "",
         f"| Severity | Count |",
@@ -264,6 +327,12 @@ def _write_review_evidence(
             "model_file": ir.model_file,
             "code_files": ir.code_files,
         },
+        "input_digests": {
+            "algorithm": "sha256",
+            "spec_file": _file_digest(spec_file),
+            "model_file": _file_digest(ir.model_file),
+            "code_files": [_file_digest(f) for f in ir.code_files],
+        },
         "ir_summary": {
             "signals": len(ir.signals),
             "states": len(ir.states),
@@ -302,26 +371,76 @@ def _write_ir_snapshot(out: Path, ir: IRSnapshot) -> None:
     )
 
 
-def _write_findings(out: Path, findings: list[Finding]) -> None:
+def _write_findings(
+    out: Path,
+    findings: list[Finding],
+    coverage_gaps: list[CoverageGap],
+    analysis_status: str,
+) -> None:
+    if coverage_gaps:
+        status = "analysis_incomplete"
+    elif findings:
+        status = "findings_present"
+    else:
+        status = "no_findings"
     payload = {
         "finding_count": len(findings),
-        "status": "no_findings" if not findings else "findings_present",
+        # `status` is the single field a CI script is most likely to read, so it
+        # must surface UNKNOWN ahead of the finding count, not behind it.
+        "status": status,
+        "analysis_status": analysis_status,
+        "coverage_gap_count": len(coverage_gaps),
         "findings": [f.model_dump(mode="json") for f in findings],
+        "coverage_gaps": [g.model_dump(mode="json") for g in coverage_gaps],
     }
     (out / "findings.json").write_text(
         json.dumps(payload, indent=2), encoding="utf-8"
     )
 
 
-def _write_html_report(out: Path, ir: IRSnapshot, findings: list[Finding], run_id: str) -> None:
+def _write_html_report(
+    out: Path,
+    ir: IRSnapshot,
+    findings: list[Finding],
+    run_id: str,
+    coverage_gaps: list[CoverageGap],
+) -> None:
     by_sev = _findings_by_severity(findings)
     critical = len(by_sev["CRITICAL"])
     high = len(by_sev["HIGH"])
     medium = len(by_sev["MEDIUM"])
     low = len(by_sev["LOW"])
 
-    status_color = "#d32f2f" if (critical or high) else "#2e7d32"
-    status_text = "REVIEW REQUIRED" if (critical or high) else "PASS"
+    if coverage_gaps:
+        status_color = "#ef6c00"
+        status_text = "UNKNOWN — ANALYSIS COVERAGE INCOMPLETE"
+    else:
+        status_color = "#d32f2f" if (critical or high) else "#2e7d32"
+        status_text = "REVIEW REQUIRED" if (critical or high) else "PASS"
+
+    coverage_html = ""
+    if coverage_gaps:
+        items = ""
+        for g in coverage_gaps:
+            constructs = (
+                "<br><small>Unanalyzed: <code>"
+                + "</code>, <code>".join(g.unanalyzed_constructs)
+                + "</code></small>"
+                if g.unanalyzed_constructs else ""
+            )
+            items += (
+                f"<li><strong>{g.id} — {g.title}</strong><br>"
+                f"<small><code>{g.category.value}</code> &middot; "
+                f"<code>{g.affected_input}</code></small><br>{g.summary}{constructs}</li>\n"
+            )
+        coverage_html = (
+            '<h2>⚠️ Analysis Coverage Incomplete</h2>\n'
+            '<div style="background:#fff3e0;border-left:5px solid #ef6c00;padding:1rem">\n'
+            "<p>EAL was asked to analyze input it could not fully model. The finding counts "
+            "below describe only the analyzed portion. Absence of findings in the unanalyzed "
+            "regions is <strong>not</strong> evidence of their correctness.</p>\n"
+            f"<ul>{items}</ul>\n</div>\n"
+        )
 
     def sev_badge(sev: str) -> str:
         colors = {"CRITICAL": "#d32f2f", "HIGH": "#f57c00", "MEDIUM": "#fbc02d", "LOW": "#1976d2"}
@@ -374,6 +493,7 @@ def _write_html_report(out: Path, ir: IRSnapshot, findings: list[Finding], run_i
 <p>Run ID: <code>{run_id}</code> &nbsp;|&nbsp; Generated: {_now_iso()}</p>
 <p class="status">{status_text}</p>
 
+{coverage_html}
 <h2>Summary</h2>
 <div class="stat"><strong style="color:#d32f2f">{critical}</strong>CRITICAL</div>
 <div class="stat"><strong style="color:#f57c00">{high}</strong>HIGH</div>
@@ -415,8 +535,18 @@ def _write_run_metadata(
     gate_failed: bool,
     exit_reason: str,
     sarif_file: str,
+    coverage_gaps: list[CoverageGap],
+    analysis_status: str,
+    fail_on_unknown: bool,
 ) -> None:
     from eal import __version__
+    incomplete = bool(coverage_gaps)
+    if incomplete:
+        results_status = "UNKNOWN"
+        gate_result = "UNKNOWN"
+    else:
+        results_status = "REVIEW_REQUIRED" if (critical_count or high_count) else "PASS"
+        gate_result = "FAIL" if gate_failed else "PASS"
     payload = {
         "run_id": run_id,
         "eal_version": __version__,
@@ -433,13 +563,23 @@ def _write_run_metadata(
             "medium_count": medium_count,
             "critical_count": critical_count,
             "high_count": high_count,
-            "status": "REVIEW_REQUIRED" if (critical_count or high_count) else "PASS",
+            "status": results_status,
+        },
+        "coverage": {
+            "analysis_status": analysis_status,
+            "gap_count": len(coverage_gaps),
+            "gaps": [g.model_dump(mode="json") for g in coverage_gaps],
+            "notes": (
+                "analysis_status=INCOMPLETE means part of the supplied input was not "
+                "analyzed. Finding counts describe the analyzed portion only."
+            ),
         },
         "gate": {
             "fail_on_severity": fail_on_severity,
             "min_severity": min_severity,
+            "fail_on_unknown": fail_on_unknown,
             "failed": gate_failed,
-            "result": "FAIL" if gate_failed else "PASS",
+            "result": gate_result,
             "exit_reason": exit_reason,
         },
         "policy": {
@@ -448,6 +588,7 @@ def _write_run_metadata(
                 "fail_on_severity": fail_on_severity,
                 "min_severity": min_severity,
                 "strictness": strictness,
+                "fail_on_unknown": fail_on_unknown,
             },
             "sources": policy_sources,
             "notes": "Precedence: explicit CLI flags override selected policy profile defaults.",
@@ -488,13 +629,17 @@ def write_artifacts(
     highest_severity_found: str = "NONE",
     gate_failed: bool = False,
     exit_reason: str = "REVIEW_COMPLETED",
+    coverage_gaps: Optional[list[CoverageGap]] = None,
+    analysis_status: str = "COMPLETE",
+    fail_on_unknown: bool = True,
 ) -> None:
     """Write all review artifacts to out_dir. Directory must already exist."""
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    coverage_gaps = coverage_gaps or []
     by_sev = _findings_by_severity(findings)
     spec_file = ir.spec_file
-    sarif_file = write_sarif_artifact(out_dir, findings, run_id)
+    sarif_file = write_sarif_artifact(out_dir, findings, run_id, coverage_gaps=coverage_gaps)
 
     _write_review_summary(
         out_dir,
@@ -511,14 +656,16 @@ def write_artifacts(
         highest_severity_found=highest_severity_found,
         gate_failed=gate_failed,
         sarif_file=sarif_file,
+        coverage_gaps=coverage_gaps,
+        analysis_status=analysis_status,
     )
     _write_constraint_violations(out_dir, findings)
     _write_missing_assumptions(out_dir, findings)
     _write_counterexamples(out_dir, findings)
     _write_review_evidence(out_dir, ir, run_id, spec_file, sarif_file=sarif_file)
     _write_ir_snapshot(out_dir, ir)
-    _write_findings(out_dir, findings)
-    _write_html_report(out_dir, ir, findings, run_id)
+    _write_findings(out_dir, findings, coverage_gaps, analysis_status)
+    _write_html_report(out_dir, ir, findings, run_id, coverage_gaps)
     _write_run_metadata(
         out_dir,
         run_id=run_id,
@@ -541,4 +688,7 @@ def write_artifacts(
         gate_failed=gate_failed,
         exit_reason=exit_reason,
         sarif_file=sarif_file,
+        coverage_gaps=coverage_gaps,
+        analysis_status=analysis_status,
+        fail_on_unknown=fail_on_unknown,
     )

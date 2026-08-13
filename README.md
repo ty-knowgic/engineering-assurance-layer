@@ -41,8 +41,10 @@ produces machine-readable artifacts that can feed CI gates or human review workf
 8. Supports deterministic rule strictness profiles (`--strictness relaxed|balanced|strict`)
 9. Supports built-in policy profiles for operational contexts (`--policy-profile`)
 10. Ingests a narrow BehaviorTree XML slice via `--bt-xml`
-11. Emits 10 review artifacts, including SARIF v2.1.0 output
-12. Includes a minimal GitHub Actions workflow for test + review + artifact upload
+11. Ingests real upstream Nav2 parameter YAML via `--nav2-params` (MPPI and DWB)
+12. Reports `PASS / FAIL / UNKNOWN`, where UNKNOWN means analysis coverage was incomplete
+13. Emits 10 review artifacts, including SARIF v2.1.0 output
+14. Includes a minimal GitHub Actions workflow for test + review + artifact upload
 
 ---
 
@@ -70,6 +72,53 @@ produces machine-readable artifacts that can feed CI gates or human review workf
 
 - Multi-file/cross-document spec linkage
 - Symbolic/boolean theorem-proving-style checks beyond current numeric Z3 encoding
+
+---
+
+## Reproduce the Demo
+
+One command, from a fresh clone:
+
+```bash
+make verify
+```
+
+That creates a virtualenv, installs the package, runs the test suite, then
+regenerates the demo from four **unmodified upstream Nav2 files** and checks the
+result against the committed output byte-for-byte. No network access and no ROS
+installation are required.
+
+The demo runs four scenarios and shows all three outcomes on real input:
+
+| Scenario | Input | Exit | Outcome |
+|----------|-------|------|---------|
+| `nav2_dwb_coherent` | `nav2_system_params.yaml` (DWB) | 0 | PASS, 0 findings |
+| `nav2_mppi_bringup` | `nav2_params.yaml` (MPPI) | 2 | FAIL, 3 findings |
+| `nav2_mppi_no_map` | `nav2_no_map_params.yaml` (MPPI) | 2 | FAIL, 6 findings |
+| `nav2_bt_unanalyzable` | `navigate_to_pose_w_replanning_and_recovery.xml` | 3 | UNKNOWN |
+
+Results and the full artifact set for each are committed under
+[`demo/`](demo/) — see [`demo/RESULTS.md`](demo/RESULTS.md). You can read what
+the tool produces without installing anything.
+
+**Input provenance.** [`demo/provenance.json`](demo/provenance.json) pins the
+upstream repository, commit, and the SHA-256 of every third-party file. The
+runner verifies those hashes before executing and refuses to run if any fixture
+has been modified — a demo on altered input proves nothing. The manifest
+includes a `verify_command` so you can re-check the hashes against upstream
+yourself.
+
+**Why the committed outputs are normalized.** Artifacts embed a run id,
+timestamps, and the git checkout the tool ran from. Those change every run, and
+the git block is absent entirely from an exported copy — so committing them raw
+would make the outputs fail to reproduce for exactly the people the demo is for.
+The demo harness replaces those fields with fixed tokens *after* the run.
+Normalization lives in `scripts/run_demo.py`, never in the product: real runs
+keep their real run ids, timestamps, and git info. Input provenance is not
+normalized away — each artifact still carries the SHA-256 of its inputs in
+`review_evidence.json`.
+
+Other targets: `make test`, `make lint`, `make demo`, `make demo-check`.
 
 ---
 
@@ -260,6 +309,61 @@ parameters, and explicit precondition/fallback evidence to assumptions. It
 does not implement full BehaviorTree.CPP execution semantics, blackboard
 resolution, port typing, decorator ordering, or arbitrary XML node behavior.
 
+### Nav2 Parameter YAML (`--nav2-params`)
+
+`--nav2-params PATH` reads a **real, unmodified upstream Nav2 parameter file** —
+not an EAL-shaped abstraction of one. It is currently the only importer that
+does so.
+
+It extracts the motion limits a Nav2 stack declares in two independent places,
+plus the supporting values those limits must be consistent with:
+
+| Source | Extracted |
+|--------|-----------|
+| `controller_server.<plugin_key>` | max/min linear velocity, max angular velocity, linear accel/decel, angular accel |
+| `velocity_smoother` | the same six roles, from the `[x, y, theta]` limit vectors |
+| `controller_server` | `controller_frequency`, `costmap_update_timeout` |
+| MPPI plugin block | `time_steps`, `model_dt` |
+| `local_costmap` | `update_frequency`, `width`, `height`, `resolution`, `robot_radius` |
+| inflation layer | `inflation_radius`, `cost_scaling_factor` |
+| observation sources | `obstacle_max_range`, `obstacle_min_range`, `raytrace_max_range` |
+
+Values are normalized to **plugin-independent roles** (`v_max_linear`,
+`a_decel_linear`, …) so the same downstream logic works across controllers. Only
+the parameter-name mapping is per-plugin:
+
+| Role | MPPI | DWB |
+|------|------|-----|
+| `v_max_linear` | `vx_max` | `max_vel_x` |
+| `v_min_linear` | `vx_min` | `min_vel_x` |
+| `v_max_angular` | `wz_max` | `max_vel_theta` |
+| `a_accel_linear` | `ax_max` | `acc_lim_x` |
+| `a_decel_linear` | `ax_min` | `decel_lim_x` |
+| `a_accel_angular` | `az_max` | `acc_lim_theta` |
+
+Every extracted value keeps the exact dotted YAML path it came from, e.g.
+`controller_server.ros__parameters.FollowPath.ax_min`, so a finding can name the
+line a human has to go edit. The plugin config key is read from
+`controller_plugins` rather than assumed to be `FollowPath`.
+
+The importer only extracts and records provenance. Comparing the values is done
+separately (see Nav2 Coherence Checks below), so that an extraction bug and a
+check bug cannot hide inside each other.
+
+**Unrecognised controller plugins are reported as UNKNOWN, never guessed at.**
+Only MPPI and DWB have mappings, because those are the only ones validated
+against a real upstream file. Inventing a mapping for an unvalidated plugin
+would produce confident nonsense.
+
+Fixtures and expected values live in `tests/fixtures/nav2_upstream_params/` and
+`tests/test_nav2_params.py`. The expected values were transcribed by reading the
+YAML by hand, not by running the parser — an extractor validated against its own
+output validates nothing.
+
+Not extracted, and therefore not available to any check: sensor and actuator
+latency (absent from every Nav2 config file), and actual obstacle clearance
+(runtime state, not configuration).
+
 ### YAML Model
 
 ```yaml
@@ -353,7 +457,7 @@ even if empty (explicit status markers prevent silent omissions).
 | `constraint_violations.md` | All CRITICAL and HIGH findings with full detail |
 | `missing_assumptions.md` | MISSING_ASSUMPTION findings with suggested fixes |
 | `counterexamples.json` | Machine-readable counterexample structures from Z3 and rule checks |
-| `review_evidence.json` | Run provenance: inputs, IR summary, git info, timestamp |
+| `review_evidence.json` | Run provenance: inputs, SHA-256 of every input file, IR summary, git info, timestamp |
 | `ir_snapshot.json` | Full IR dump, including selective requirement linkage metadata (`requirement_classes`, `parsed_constraints`, `linkage_reasons`) |
 | `findings.json` | All findings in stable schema (id, severity, category, title, summary, fix) |
 | `results.sarif` | SARIF v2.1.0 transform of canonical findings for IDE/CI ingestion |
@@ -388,13 +492,16 @@ Current limitation:
 `eal review` supports deterministic severity-threshold gating:
 
 - `--policy-profile <NAME>`
-  - Values: `local`, `ci`, `main`, `strict`
+  - Values: `local`, `ci`, `main`, `prod`, `strict`
   - Default: `local`
   - Built-in defaults:
-    - `local` → `fail_on_severity=NONE`, `strictness=balanced`, `min_severity=LOW`
-    - `ci` → `fail_on_severity=HIGH`, `strictness=balanced`, `min_severity=LOW`
-    - `main` → `fail_on_severity=HIGH`, `strictness=relaxed`, `min_severity=LOW`
-    - `strict` → `fail_on_severity=MEDIUM`, `strictness=strict`, `min_severity=LOW`
+    - `local` → `fail_on_severity=NONE`, `strictness=balanced`, `min_severity=LOW`, `fail_on_unknown=false`
+    - `ci` → `fail_on_severity=HIGH`, `strictness=balanced`, `min_severity=LOW`, `fail_on_unknown=true`
+    - `main` → `fail_on_severity=HIGH`, `strictness=relaxed`, `min_severity=LOW`, `fail_on_unknown=true`
+    - `strict` → `fail_on_severity=MEDIUM`, `strictness=strict`, `min_severity=LOW`, `fail_on_unknown=true`
+- `--fail-on-unknown` / `--no-fail-on-unknown`
+  - Exit `3` when analysis coverage is incomplete (overrides the profile default)
+  - Does not affect reporting: UNKNOWN appears in all artifacts either way
 - `--fail-on-severity <LEVEL>`
   - Values: `CRITICAL`, `HIGH`, `MEDIUM`, `LOW`, `NONE`
   - Default via policy profile (`local` resolves to `NONE`)
@@ -420,9 +527,66 @@ Precedence:
 
 - `0`: review completed and gate passed
 - `2`: review completed and gate threshold exceeded
+- `3`: analysis coverage incomplete (UNKNOWN) and the profile blocks on UNKNOWN
 - `1`: pipeline/infrastructure error
 
-This allows CI scripts to distinguish analysis execution failures from policy failures.
+This allows CI scripts to distinguish analysis execution failures from policy
+failures, and both of those from *an analysis that did not actually cover the
+input*. Exit `3` takes precedence over `2`.
+
+---
+
+## Analysis Coverage and the UNKNOWN Result
+
+A finding says "I analyzed this and found a problem". A **coverage gap** says
+"I could not analyze this, so my silence about it means nothing".
+
+EAL's importers are narrow by design. Given input they do not model, the honest
+answer is UNKNOWN, not PASS. When any coverage gap is detected:
+
+- `findings.json` → `status: "analysis_incomplete"`, plus `analysis_status`,
+  `coverage_gap_count`, and a `coverage_gaps[]` array
+- `run_metadata.json` → `results.status: "UNKNOWN"`, `gate.result: "UNKNOWN"`,
+  `gate.exit_reason: "ANALYSIS_COVERAGE_INCOMPLETE"`, and a `coverage` block
+- `results.sarif` → one result per gap under rule id `EAL_COVERAGE_<CATEGORY>`
+  at level `warning`, plus `invocations[0].properties.analysisStatus`
+- `review_summary.md` / `report.html` → a coverage section above the findings
+- exit code → `3` when the profile blocks on UNKNOWN
+
+Coverage is a **separate plane from severity**, not a fifth severity level.
+Severity is an ordered scale driving gate thresholds; coverage is orthogonal to
+it. Folding UNKNOWN into `FindingSeverity` would corrupt every threshold
+comparison and let unanalyzable input masquerade as a graded result.
+
+### Coverage gap categories
+
+| Category | Fires when |
+|----------|-----------|
+| `UNSUPPORTED_INPUT_CONSTRUCT` | An importer named constructs it does not model (BehaviorTree nodes outside the supported subset; a Nav2 controller plugin with no validated mapping) |
+| `INPUT_YIELDED_NO_CONTENT` | An input file was explicitly supplied but contributed nothing to the IR |
+| `NO_ANALYZABLE_CONTENT` | The merged IR has no signals, constraints, or transitions, so no check could have fired |
+
+Detection is deliberately conservative — a false UNKNOWN destroys trust in the
+gate as surely as a false PASS does. Each rule fires only on an unambiguous
+signal, and contribution is measured as a before/after IR delta rather than
+trusted from the loader. All 17 curated examples report `COMPLETE`.
+
+### Reporting vs blocking
+
+Reporting is always honest; blocking is a policy decision. The `local` profile
+reports UNKNOWN in every artifact but still exits `0`, so exploratory runs stay
+non-blocking. All other profiles exit `3`. Override with
+`--fail-on-unknown` / `--no-fail-on-unknown`.
+
+### Known-limitation regression fixtures
+
+`tests/fixtures/nav2_upstream_bt/` holds five unmodified behavior trees from
+`ros-navigation/navigation2` @ `075b29611a7d21ff4f1c74077a17c672e708001c`
+(retrieved 2026-08-13). EAL cannot analyze them — they are built from
+`RecoveryNode`, `PipelineSequence`, `ReactiveSequence`, `RateController`,
+`Inverter`, `ReactiveFallback`, and `RoundRobin`, none of which the importer
+models. `tests/test_coverage.py` asserts that every one of them yields UNKNOWN
+rather than a zero-finding PASS in every machine-readable plane.
 
 ---
 
@@ -472,6 +636,86 @@ authoritative signal.
 | Code timing constant/threshold exceeds declared timing | `CODE_TIMING_MISMATCH` | HIGH | high | always-on |
 | Code parameter appears related but unmodeled | `CODE_UNMODELED_PARAMETER` | MEDIUM | low | heuristic (suppressed in `relaxed`) |
 
+## Nav2 Coherence Checks
+
+Run automatically when `--nav2-params` is supplied.
+
+### (A) Controller / velocity_smoother limit coherence
+
+A Nav2 stack declares its motion limits twice. The verified command chain
+(`nav2_bringup/launch/navigation_launch.py` remappings) is:
+
+```
+controller_server -> cmd_vel_nav -> velocity_smoother
+    -> cmd_vel_smoothed -> collision_monitor -> cmd_vel -> base
+```
+
+so the smoother's limits are what the base actually receives and the
+controller's are a request. A text diff of `vx_max: 0.5 -> 2.0` cannot tell you
+whether the two still agree. This check compares them by magnitude, per role.
+
+**Direction determines the finding, and the three cases are not equivalent:**
+
+| Case | Category | Severity |
+|------|----------|----------|
+| Controller > smoother, on **acceleration** | `NAV2_ACCEL_OVERDECLARED` | HIGH |
+| Controller > smoother, on **velocity** | `NAV2_VELOCITY_OVERDECLARED` | MEDIUM |
+| Controller < smoother, either quantity | `NAV2_LIMIT_HEADROOM` | LOW, `strict` only |
+
+Acceleration is separated out because the controller rolls out and validates
+candidate trajectories against its own figure. If the chain delivers less
+braking than assumed, a trajectory accepted as collision-free may not be
+achievable — that leans unsafe. Over-declared *velocity* only means the robot
+executes more slowly than planned: a model-fidelity problem, not an unsafe one.
+
+The informational third case is `strict`-only because it was measured to be
+noise: on the real corpus it fired twice, once for 5% of unused angular envelope
+and once for DWB's `min_vel_x: 0.0`, which just means the robot does not
+reverse. Both are dismissed by any reviewer. The direction *distinction* is
+enforced at every strictness level — the conservative case is never reported as
+a mismatch.
+
+**The check does not decide whether a mismatch is a defect.** That depends on
+intent, which is not in the file: a generically-tuned controller paired with a
+platform-tuned smoother produces this legitimately. Findings report both values,
+both YAML paths, and the direction, and say so explicitly.
+
+If a stack has no `velocity_smoother`, the comparison is inapplicable and stays
+silent. That is not the same as UNKNOWN and does not raise a coverage gap.
+
+### (B) MPPI prediction horizon vs local costmap
+
+Not EAL's model — the rule is stated in the upstream
+`nav2_mppi_controller/README.md`:
+
+```
+time_steps * model_dt * vx_max  <=  min(costmap width, height) / 2
+```
+
+When the prediction horizon at maximum speed overruns the costmap radius, the
+planner is reasoning about space it has no map data for and the robot is
+artificially limited by the costmap. Category
+`NAV2_HORIZON_EXCEEDS_COSTMAP`, MEDIUM. Silently inapplicable to controllers
+that declare no `time_steps`/`model_dt`.
+
+### Results on the real corpus
+
+All three fixtures are unmodified upstream files at the same commit. No defects
+were injected.
+
+| Fixture | Controller | Result |
+|---------|-----------|--------|
+| `nav2_system_params.yaml` | DWB | **PASS** — all six roles agree |
+| `nav2_params.yaml` | MPPI | **FAIL** — 3x `NAV2_ACCEL_OVERDECLARED` (1.20x, 1.20x, 1.09x) |
+| `nav2_no_map_params.yaml` | MPPI | **FAIL** — the same 3, plus 3x `NAV2_VELOCITY_OVERDECLARED` (1.92x, 1.90x, 1.35x) |
+
+The horizon rule passes on both MPPI configs, but only just:
+`56 x 0.05 x 0.5 = 1.400 m` against a `1.500 m` radius, a 6.7% margin. Raising
+`vx_max` to `0.54` alone breaks it — which is the point of the check, since that
+edit looks harmless in a diff.
+
+---
+
 ## Z3 Checks
 
 | Check | Category | Severity |
@@ -502,6 +746,10 @@ tests/test_rules.py        — each rule individually + full run on examples
 tests/test_solver.py       — Z3 checks including UNSAT case
 tests/test_cli.py          — end-to-end CLI smoke tests on both examples
 tests/test_examples_corpus.py — role-based example corpus expectations
+tests/test_coverage.py     — UNKNOWN plane; real upstream Nav2 trees must never report PASS
+tests/test_nav2_params.py  — Nav2 param extraction vs hand-read values on real upstream files
+tests/test_nav2_coherence.py — Nav2 limit-coherence and horizon checks, incl. direction regression
+tests/test_demo.py         — demo fixture provenance and committed-output integrity
 ```
 
 ---
@@ -525,6 +773,20 @@ Short version:
 - Mode scoping supports only explicit deterministic patterns listed above
 - Python static analysis currently covers only simple constants/comparisons
 - Strictness control currently suppresses only explicitly marked heuristic rules
+- Real ROS 2 artifact ingestion is limited to Nav2 parameter YAML for the MPPI
+  and DWB controllers. Real BehaviorTree files from upstream Nav2 produce
+  UNKNOWN, not analysis — see the regression fixtures above
+- Nav2 coherence covers declared limits and the documented horizon rule only.
+  It does not model stopping distance, sensor or actuator latency (absent from
+  every Nav2 config file), or actual obstacle clearance (runtime state)
+- The `TIMING_GAP` rule's trigger regex matches the word "within" without
+  distinguishing temporal from spatial use, so a requirement like "must fit
+  within the costmap" is misread as a timing requirement. Known false positive,
+  not yet fixed
+- `counterexamples.json` entries for UNSAT results list the asserted constraint
+  IDs and `z3_result: "unsat"`. No unsat core is computed and no witness model
+  exists for an UNSAT system, so these are **not** counterexamples in the
+  model-theoretic sense
 
 ---
 

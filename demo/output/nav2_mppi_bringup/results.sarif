@@ -1,0 +1,175 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "automationDetails": {
+        "id": "eal-DEMO-NORMALIZED"
+      },
+      "tool": {
+        "driver": {
+          "name": "engineering-assurance-layer",
+          "version": "0.0.2",
+          "rules": [
+            {
+              "id": "NAV2_ACCEL_OVERDECLARED",
+              "name": "NAV2_ACCEL_OVERDECLARED",
+              "shortDescription": {
+                "text": "Controller declares linear acceleration limit 1.20x the downstream smoother limit"
+              },
+              "fullDescription": {
+                "text": "Controller `ax_max` = 3.0 m/s^2 (controller_server.ros__parameters.FollowPath.ax_max); downstream velocity_smoother `max_accel[0]` = 2.5 m/s^2 (velocity_smoother.ros__parameters.max_accel[0]). The controller's figure exceeds the smoother's by 1.20x, and the smoother is what the base actually receives."
+              },
+              "defaultConfiguration": {
+                "level": "error"
+              }
+            }
+          ]
+        }
+      },
+      "invocations": [
+        {
+          "executionSuccessful": true,
+          "properties": {
+            "analysisStatus": "COMPLETE",
+            "coverageGapCount": 0
+          }
+        }
+      ],
+      "results": [
+        {
+          "ruleId": "NAV2_ACCEL_OVERDECLARED",
+          "level": "error",
+          "message": {
+            "text": "Controller declares linear acceleration limit 1.20x the downstream smoother limit Controller `ax_max` = 3.0 m/s^2 (controller_server.ros__parameters.FollowPath.ax_max); downstream velocity_smoother `max_accel[0]` = 2.5 m/s^2 (velocity_smoother.ros__parameters.max_accel[0]). The controller's figure exceeds the smoother's by 1.20x, and the smoother is what the base actually receives. The controller rolls out and validates candidate trajectories against its own figure. Because the smoother caps what actually reaches the base, a trajectory accepted as feasible or collision-free under the controller's figure may not be achievable in execution. This leans in the unsafe direction. Whether this is a defect depends on intent, which is not recorded in the configuration: a generically-tuned controller paired with a platform-tuned smoother can produce this legitimately. EAL reports both values and the direction; the judgement is yours."
+          },
+          "properties": {
+            "ealFindingId": "F-001",
+            "severity": "HIGH",
+            "related_ir_nodes": [
+              "NAV2-CONTROLLER_A_ACCEL_LINEAR",
+              "NAV2-SMOOTHER_A_ACCEL_LINEAR"
+            ],
+            "evidence_refs": [
+              "nav2_plugin:nav2_mppi_controller::MPPIController"
+            ],
+            "source_refs": [
+              "tests/fixtures/nav2_upstream_params/nav2_params.yaml:controller_server.ros__parameters.FollowPath.ax_max",
+              "tests/fixtures/nav2_upstream_params/nav2_params.yaml:velocity_smoother.ros__parameters.max_accel[0]"
+            ]
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "tests/fixtures/nav2_upstream_params/nav2_params.yaml"
+                }
+              }
+            }
+          ],
+          "relatedLocations": [
+            {
+              "id": 1,
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "tests/fixtures/nav2_upstream_params/nav2_params.yaml"
+                }
+              },
+              "message": {
+                "text": "Additional source reference"
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "NAV2_ACCEL_OVERDECLARED",
+          "level": "error",
+          "message": {
+            "text": "Controller declares linear deceleration limit 1.20x the downstream smoother limit Controller `ax_min` = -3.0 m/s^2 (controller_server.ros__parameters.FollowPath.ax_min); downstream velocity_smoother `max_decel[0]` = -2.5 m/s^2 (velocity_smoother.ros__parameters.max_decel[0]). The controller's figure exceeds the smoother's by 1.20x, and the smoother is what the base actually receives. The controller rolls out and validates candidate trajectories against its own figure. Because the smoother caps what actually reaches the base, a trajectory accepted as feasible or collision-free under the controller's figure may not be achievable in execution. This leans in the unsafe direction. Whether this is a defect depends on intent, which is not recorded in the configuration: a generically-tuned controller paired with a platform-tuned smoother can produce this legitimately. EAL reports both values and the direction; the judgement is yours."
+          },
+          "properties": {
+            "ealFindingId": "F-002",
+            "severity": "HIGH",
+            "related_ir_nodes": [
+              "NAV2-CONTROLLER_A_DECEL_LINEAR",
+              "NAV2-SMOOTHER_A_DECEL_LINEAR"
+            ],
+            "evidence_refs": [
+              "nav2_plugin:nav2_mppi_controller::MPPIController"
+            ],
+            "source_refs": [
+              "tests/fixtures/nav2_upstream_params/nav2_params.yaml:controller_server.ros__parameters.FollowPath.ax_min",
+              "tests/fixtures/nav2_upstream_params/nav2_params.yaml:velocity_smoother.ros__parameters.max_decel[0]"
+            ]
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "tests/fixtures/nav2_upstream_params/nav2_params.yaml"
+                }
+              }
+            }
+          ],
+          "relatedLocations": [
+            {
+              "id": 1,
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "tests/fixtures/nav2_upstream_params/nav2_params.yaml"
+                }
+              },
+              "message": {
+                "text": "Additional source reference"
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "NAV2_ACCEL_OVERDECLARED",
+          "level": "error",
+          "message": {
+            "text": "Controller declares angular acceleration limit 1.09x the downstream smoother limit Controller `az_max` = 3.5 rad/s^2 (controller_server.ros__parameters.FollowPath.az_max); downstream velocity_smoother `max_accel[2]` = 3.2 rad/s^2 (velocity_smoother.ros__parameters.max_accel[2]). The controller's figure exceeds the smoother's by 1.09x, and the smoother is what the base actually receives. The controller rolls out and validates candidate trajectories against its own figure. Because the smoother caps what actually reaches the base, a trajectory accepted as feasible or collision-free under the controller's figure may not be achievable in execution. This leans in the unsafe direction. Whether this is a defect depends on intent, which is not recorded in the configuration: a generically-tuned controller paired with a platform-tuned smoother can produce this legitimately. EAL reports both values and the direction; the judgement is yours."
+          },
+          "properties": {
+            "ealFindingId": "F-003",
+            "severity": "HIGH",
+            "related_ir_nodes": [
+              "NAV2-CONTROLLER_A_ACCEL_ANGULAR",
+              "NAV2-SMOOTHER_A_ACCEL_ANGULAR"
+            ],
+            "evidence_refs": [
+              "nav2_plugin:nav2_mppi_controller::MPPIController"
+            ],
+            "source_refs": [
+              "tests/fixtures/nav2_upstream_params/nav2_params.yaml:controller_server.ros__parameters.FollowPath.az_max",
+              "tests/fixtures/nav2_upstream_params/nav2_params.yaml:velocity_smoother.ros__parameters.max_accel[2]"
+            ]
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "tests/fixtures/nav2_upstream_params/nav2_params.yaml"
+                }
+              }
+            }
+          ],
+          "relatedLocations": [
+            {
+              "id": 1,
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "tests/fixtures/nav2_upstream_params/nav2_params.yaml"
+                }
+              },
+              "message": {
+                "text": "Additional source reference"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

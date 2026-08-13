@@ -89,6 +89,12 @@ def review(
         help="Path to a narrow BehaviorTree XML artifact (optional)",
         exists=True, file_okay=True, dir_okay=False,
     ),
+    nav2_params: Optional[Path] = typer.Option(
+        None,
+        "--nav2-params",
+        help="Path to a Nav2 parameter YAML (real upstream format, optional)",
+        exists=True, file_okay=True, dir_okay=False,
+    ),
     code: Optional[list[Path]] = typer.Option(
         None,
         "--code", "-c",
@@ -119,6 +125,11 @@ def review(
         "--strictness",
         help="Rule strictness profile (overrides policy profile)",
     ),
+    fail_on_unknown: Optional[bool] = typer.Option(
+        None,
+        "--fail-on-unknown/--no-fail-on-unknown",
+        help="Exit 3 when analysis coverage is incomplete (overrides policy profile)",
+    ),
     log_level: str = typer.Option("INFO", "--log-level", help="Logging level"),
 ) -> None:
     """Run a full engineering assurance review and emit artifacts."""
@@ -130,12 +141,14 @@ def review(
         fail_on_severity=fail_on_severity.value if fail_on_severity else None,
         min_severity=min_severity.value if min_severity else None,
         strictness=strictness.value if strictness else None,
+        fail_on_unknown=fail_on_unknown,
     )
 
     console.rule("[bold blue]Engineering Assurance Layer[/bold blue]")
     console.print(f"  Spec:  [cyan]{spec}[/cyan]")
     console.print(f"  Model: [cyan]{model or '(none)'}[/cyan]")
     console.print(f"  BT XML: [cyan]{bt_xml or '(none)'}[/cyan]")
+    console.print(f"  Nav2:  [cyan]{nav2_params or '(none)'}[/cyan]")
     if code_paths:
         for cp in code_paths:
             console.print(f"  Code:  [cyan]{cp}[/cyan]")
@@ -144,6 +157,10 @@ def review(
     console.print(f"  Gate:  fail on [cyan]{resolved_policy.fail_on_severity}[/cyan] and above")
     console.print(f"  View:  min severity [cyan]{resolved_policy.min_severity}[/cyan]")
     console.print(f"  Rules: strictness [cyan]{resolved_policy.strictness}[/cyan]")
+    console.print(
+        f"  Unknown: {'blocking' if resolved_policy.fail_on_unknown else 'non-blocking'} "
+        f"(exit 3 when coverage incomplete)"
+    )
     console.print()
 
     from eal.pipeline import run_review
@@ -154,11 +171,13 @@ def review(
         code_paths=code_paths,
         out_dir=out,
         bt_xml_path=bt_xml,
+        nav2_params_path=nav2_params,
         fail_on_severity=resolved_policy.fail_on_severity,
         min_severity=resolved_policy.min_severity,
         strictness=resolved_policy.strictness,
         policy_profile=resolved_policy.profile.value,
         policy_sources=resolved_policy.source_map(),
+        fail_on_unknown=resolved_policy.fail_on_unknown,
     )
 
     if exit_code == 1:
@@ -174,6 +193,8 @@ def review(
     findings_data = json.loads(findings_path.read_text()) if findings_path.exists() else {}
     metadata = json.loads(metadata_path.read_text()) if metadata_path.exists() else {}
     findings = findings_data.get("findings", [])
+    coverage_gaps = findings_data.get("coverage_gaps", [])
+    analysis_incomplete = bool(coverage_gaps)
     strictness_info = metadata.get("strictness", {})
     policy_info = metadata.get("policy", {})
     suppressed_count = int(strictness_info.get("suppressed_finding_count", 0))
@@ -224,8 +245,27 @@ def review(
             f"({len(findings)} total findings exist).[/dim]"
         )
 
+    if analysis_incomplete:
+        console.print()
+        console.print(
+            "[bold black on yellow] ⚠  ANALYSIS COVERAGE INCOMPLETE — RESULT IS UNKNOWN [/]"
+        )
+        for g in coverage_gaps:
+            console.print(
+                f"  [yellow]{g.get('id','')}[/yellow] "
+                f"[{g.get('category','')}] {g.get('title','')}"
+            )
+            if g.get("unanalyzed_constructs"):
+                console.print(
+                    f"        unanalyzed: [dim]{', '.join(g['unanalyzed_constructs'])}[/dim]"
+                )
+        console.print(
+            "  [dim]Finding counts below cover the analyzed portion only. "
+            "Absence of findings elsewhere is not evidence of correctness.[/dim]"
+        )
+
     overall_ok = by_sev["CRITICAL"] == 0 and by_sev["HIGH"] == 0
-    review_status = "PASS" if overall_ok else "REVIEW REQUIRED"
+    review_status = "UNKNOWN" if analysis_incomplete else ("PASS" if overall_ok else "REVIEW REQUIRED")
     gate_failed = exit_code == 2
 
     console.print(f"\nHighest severity found: [bold]{highest_found}[/bold]")
@@ -237,7 +277,11 @@ def review(
     console.print(f"Displayed findings: {len(displayed_findings)} of {len(findings)}")
     console.print(f"Review status: [bold]{review_status}[/bold]")
 
-    if gate_failed:
+    if analysis_incomplete:
+        console.print(
+            "[bold yellow]Gate result: UNKNOWN (analysis coverage incomplete).[/bold yellow]"
+        )
+    elif gate_failed:
         console.print("[bold red]Gate result: FAIL (severity threshold exceeded).[/bold red]")
     else:
         console.print("[bold green]Gate result: PASS.[/bold green]")
@@ -249,8 +293,8 @@ def review(
     console.print(f"  → counterexamples.json")
     console.print(f"  → ir_snapshot.json")
 
-    if gate_failed:
-        raise typer.Exit(2)
+    if exit_code:
+        raise typer.Exit(exit_code)
 
 
 def main() -> None:

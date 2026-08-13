@@ -1,0 +1,35 @@
+{
+  "finding_count": 0,
+  "status": "analysis_incomplete",
+  "analysis_status": "INCOMPLETE",
+  "coverage_gap_count": 2,
+  "findings": [],
+  "coverage_gaps": [
+    {
+      "id": "U-001",
+      "category": "UNSUPPORTED_INPUT_CONSTRUCT",
+      "title": "BehaviorTree XML contains 7 unmodelled node type(s)",
+      "summary": "The BehaviorTree importer skipped node types it does not model: RecoveryNode, PipelineSequence, RateController, ReactiveSequence, Inverter, ReactiveFallback, RoundRobin. Control flow expressed through these nodes was not analyzed, so the absence of findings for those branches is not evidence of their correctness.",
+      "affected_input": "tests/fixtures/nav2_upstream_bt/navigate_to_pose_w_replanning_and_recovery.xml",
+      "unanalyzed_constructs": [
+        "RecoveryNode",
+        "PipelineSequence",
+        "RateController",
+        "ReactiveSequence",
+        "Inverter",
+        "ReactiveFallback",
+        "RoundRobin"
+      ],
+      "suggested_fix": "Express the affected behaviour in a supported construct, or treat this tree as outside EAL's current analysis envelope."
+    },
+    {
+      "id": "U-002",
+      "category": "NO_ANALYZABLE_CONTENT",
+      "title": "No analyzable content in merged IR",
+      "summary": "The merged IR contains no signals, constraints, or transitions. No deterministic rule or solver check could have fired. A zero-finding result here carries no assurance information.",
+      "affected_input": "demo/spec/nav2_motion_limits.md",
+      "unanalyzed_constructs": [],
+      "suggested_fix": "Provide a spec with Signals/Constraints/Transitions sections, or a model YAML supplying them."
+    }
+  ]
+}

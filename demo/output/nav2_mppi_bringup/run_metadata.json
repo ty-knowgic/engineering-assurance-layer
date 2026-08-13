@@ -1,0 +1,64 @@
+{
+  "run_id": "eal-DEMO-NORMALIZED",
+  "eal_version": "0.0.2",
+  "generated_at": "1970-01-01T00:00:00+00:00",
+  "inputs": {
+    "spec_file": "demo/spec/nav2_motion_limits.md",
+    "model_file": null,
+    "code_files": []
+  },
+  "results": {
+    "finding_count": 3,
+    "highest_severity_found": "HIGH",
+    "low_count": 0,
+    "medium_count": 0,
+    "critical_count": 0,
+    "high_count": 3,
+    "status": "REVIEW_REQUIRED"
+  },
+  "coverage": {
+    "analysis_status": "COMPLETE",
+    "gap_count": 0,
+    "gaps": [],
+    "notes": "analysis_status=INCOMPLETE means part of the supplied input was not analyzed. Finding counts describe the analyzed portion only."
+  },
+  "gate": {
+    "fail_on_severity": "HIGH",
+    "min_severity": "LOW",
+    "fail_on_unknown": true,
+    "failed": true,
+    "result": "FAIL",
+    "exit_reason": "SEVERITY_THRESHOLD_EXCEEDED"
+  },
+  "policy": {
+    "profile": "ci",
+    "effective": {
+      "fail_on_severity": "HIGH",
+      "min_severity": "LOW",
+      "strictness": "balanced",
+      "fail_on_unknown": true
+    },
+    "sources": {
+      "fail_on_severity": "profile_default",
+      "min_severity": "profile_default",
+      "strictness": "profile_default",
+      "fail_on_unknown": "profile_default"
+    },
+    "notes": "Precedence: explicit CLI flags override selected policy profile defaults."
+  },
+  "strictness": {
+    "level": "balanced",
+    "suppressed_finding_count": 2,
+    "suppressed_by_rule": {
+      "NAV2_LIMIT_HEADROOM": 2
+    },
+    "notes": "Strictness filtering applies to heuristic rules only; solver and always-on deterministic rules are unaffected."
+  },
+  "artifacts": {
+    "sarif": {
+      "generated": true,
+      "file": "results.sarif"
+    }
+  },
+  "git": {"normalized_by_demo_harness": true}
+}

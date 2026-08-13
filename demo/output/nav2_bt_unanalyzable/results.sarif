@@ -1,0 +1,126 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "automationDetails": {
+        "id": "eal-DEMO-NORMALIZED"
+      },
+      "tool": {
+        "driver": {
+          "name": "engineering-assurance-layer",
+          "version": "0.0.2",
+          "rules": [
+            {
+              "id": "EAL_COVERAGE_NO_ANALYZABLE_CONTENT",
+              "name": "EAL_COVERAGE_NO_ANALYZABLE_CONTENT",
+              "shortDescription": {
+                "text": "No analyzable content in merged IR"
+              },
+              "fullDescription": {
+                "text": "Analysis coverage gap: EAL was asked to analyze input it could not fully model. Absence of findings in the affected region is not evidence of its correctness."
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            },
+            {
+              "id": "EAL_COVERAGE_UNSUPPORTED_INPUT_CONSTRUCT",
+              "name": "EAL_COVERAGE_UNSUPPORTED_INPUT_CONSTRUCT",
+              "shortDescription": {
+                "text": "BehaviorTree XML contains 7 unmodelled node type(s)"
+              },
+              "fullDescription": {
+                "text": "Analysis coverage gap: EAL was asked to analyze input it could not fully model. Absence of findings in the affected region is not evidence of its correctness."
+              },
+              "defaultConfiguration": {
+                "level": "warning"
+              }
+            }
+          ]
+        }
+      },
+      "invocations": [
+        {
+          "executionSuccessful": true,
+          "properties": {
+            "analysisStatus": "INCOMPLETE",
+            "coverageGapCount": 2
+          },
+          "toolExecutionNotifications": [
+            {
+              "level": "warning",
+              "message": {
+                "text": "U-001 \u2014 BehaviorTree XML contains 7 unmodelled node type(s). The BehaviorTree importer skipped node types it does not model: RecoveryNode, PipelineSequence, RateController, ReactiveSequence, Inverter, ReactiveFallback, RoundRobin. Control flow expressed through these nodes was not analyzed, so the absence of findings for those branches is not evidence of their correctness."
+              },
+              "descriptor": {
+                "id": "EAL_COVERAGE_UNSUPPORTED_INPUT_CONSTRUCT"
+              }
+            },
+            {
+              "level": "warning",
+              "message": {
+                "text": "U-002 \u2014 No analyzable content in merged IR. The merged IR contains no signals, constraints, or transitions. No deterministic rule or solver check could have fired. A zero-finding result here carries no assurance information."
+              },
+              "descriptor": {
+                "id": "EAL_COVERAGE_NO_ANALYZABLE_CONTENT"
+              }
+            }
+          ]
+        }
+      ],
+      "results": [
+        {
+          "ruleId": "EAL_COVERAGE_UNSUPPORTED_INPUT_CONSTRUCT",
+          "level": "warning",
+          "message": {
+            "text": "BehaviorTree XML contains 7 unmodelled node type(s) The BehaviorTree importer skipped node types it does not model: RecoveryNode, PipelineSequence, RateController, ReactiveSequence, Inverter, ReactiveFallback, RoundRobin. Control flow expressed through these nodes was not analyzed, so the absence of findings for those branches is not evidence of their correctness."
+          },
+          "properties": {
+            "ealCoverageGapId": "U-001",
+            "analysisStatus": "INCOMPLETE",
+            "unanalyzed_constructs": [
+              "RecoveryNode",
+              "PipelineSequence",
+              "RateController",
+              "ReactiveSequence",
+              "Inverter",
+              "ReactiveFallback",
+              "RoundRobin"
+            ]
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "tests/fixtures/nav2_upstream_bt/navigate_to_pose_w_replanning_and_recovery.xml"
+                }
+              }
+            }
+          ]
+        },
+        {
+          "ruleId": "EAL_COVERAGE_NO_ANALYZABLE_CONTENT",
+          "level": "warning",
+          "message": {
+            "text": "No analyzable content in merged IR The merged IR contains no signals, constraints, or transitions. No deterministic rule or solver check could have fired. A zero-finding result here carries no assurance information."
+          },
+          "properties": {
+            "ealCoverageGapId": "U-002",
+            "analysisStatus": "INCOMPLETE",
+            "unanalyzed_constructs": []
+          },
+          "locations": [
+            {
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "demo/spec/nav2_motion_limits.md"
+                }
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

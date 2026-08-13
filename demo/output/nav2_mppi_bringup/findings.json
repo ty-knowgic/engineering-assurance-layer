@@ -1,0 +1,72 @@
+{
+  "finding_count": 3,
+  "status": "findings_present",
+  "analysis_status": "COMPLETE",
+  "coverage_gap_count": 0,
+  "findings": [
+    {
+      "id": "F-001",
+      "severity": "HIGH",
+      "category": "NAV2_ACCEL_OVERDECLARED",
+      "title": "Controller declares linear acceleration limit 1.20x the downstream smoother limit",
+      "summary": "Controller `ax_max` = 3.0 m/s^2 (controller_server.ros__parameters.FollowPath.ax_max); downstream velocity_smoother `max_accel[0]` = 2.5 m/s^2 (velocity_smoother.ros__parameters.max_accel[0]). The controller's figure exceeds the smoother's by 1.20x, and the smoother is what the base actually receives.",
+      "details": "The controller rolls out and validates candidate trajectories against its own figure. Because the smoother caps what actually reaches the base, a trajectory accepted as feasible or collision-free under the controller's figure may not be achievable in execution. This leans in the unsafe direction. Whether this is a defect depends on intent, which is not recorded in the configuration: a generically-tuned controller paired with a platform-tuned smoother can produce this legitimately. EAL reports both values and the direction; the judgement is yours.",
+      "related_ir_nodes": [
+        "NAV2-CONTROLLER_A_ACCEL_LINEAR",
+        "NAV2-SMOOTHER_A_ACCEL_LINEAR"
+      ],
+      "source_refs": [
+        "tests/fixtures/nav2_upstream_params/nav2_params.yaml:controller_server.ros__parameters.FollowPath.ax_max",
+        "tests/fixtures/nav2_upstream_params/nav2_params.yaml:velocity_smoother.ros__parameters.max_accel[0]"
+      ],
+      "evidence_refs": [
+        "nav2_plugin:nav2_mppi_controller::MPPIController"
+      ],
+      "suggested_fix": "Reconcile the two declarations: either raise `velocity_smoother.max_accel[0]` to 3.0, or lower `ax_max` to 2.5, whichever matches the platform's real capability.",
+      "counterexample": null
+    },
+    {
+      "id": "F-002",
+      "severity": "HIGH",
+      "category": "NAV2_ACCEL_OVERDECLARED",
+      "title": "Controller declares linear deceleration limit 1.20x the downstream smoother limit",
+      "summary": "Controller `ax_min` = -3.0 m/s^2 (controller_server.ros__parameters.FollowPath.ax_min); downstream velocity_smoother `max_decel[0]` = -2.5 m/s^2 (velocity_smoother.ros__parameters.max_decel[0]). The controller's figure exceeds the smoother's by 1.20x, and the smoother is what the base actually receives.",
+      "details": "The controller rolls out and validates candidate trajectories against its own figure. Because the smoother caps what actually reaches the base, a trajectory accepted as feasible or collision-free under the controller's figure may not be achievable in execution. This leans in the unsafe direction. Whether this is a defect depends on intent, which is not recorded in the configuration: a generically-tuned controller paired with a platform-tuned smoother can produce this legitimately. EAL reports both values and the direction; the judgement is yours.",
+      "related_ir_nodes": [
+        "NAV2-CONTROLLER_A_DECEL_LINEAR",
+        "NAV2-SMOOTHER_A_DECEL_LINEAR"
+      ],
+      "source_refs": [
+        "tests/fixtures/nav2_upstream_params/nav2_params.yaml:controller_server.ros__parameters.FollowPath.ax_min",
+        "tests/fixtures/nav2_upstream_params/nav2_params.yaml:velocity_smoother.ros__parameters.max_decel[0]"
+      ],
+      "evidence_refs": [
+        "nav2_plugin:nav2_mppi_controller::MPPIController"
+      ],
+      "suggested_fix": "Reconcile the two declarations: either raise `velocity_smoother.max_decel[0]` to -3.0, or lower `ax_min` to -2.5, whichever matches the platform's real capability.",
+      "counterexample": null
+    },
+    {
+      "id": "F-003",
+      "severity": "HIGH",
+      "category": "NAV2_ACCEL_OVERDECLARED",
+      "title": "Controller declares angular acceleration limit 1.09x the downstream smoother limit",
+      "summary": "Controller `az_max` = 3.5 rad/s^2 (controller_server.ros__parameters.FollowPath.az_max); downstream velocity_smoother `max_accel[2]` = 3.2 rad/s^2 (velocity_smoother.ros__parameters.max_accel[2]). The controller's figure exceeds the smoother's by 1.09x, and the smoother is what the base actually receives.",
+      "details": "The controller rolls out and validates candidate trajectories against its own figure. Because the smoother caps what actually reaches the base, a trajectory accepted as feasible or collision-free under the controller's figure may not be achievable in execution. This leans in the unsafe direction. Whether this is a defect depends on intent, which is not recorded in the configuration: a generically-tuned controller paired with a platform-tuned smoother can produce this legitimately. EAL reports both values and the direction; the judgement is yours.",
+      "related_ir_nodes": [
+        "NAV2-CONTROLLER_A_ACCEL_ANGULAR",
+        "NAV2-SMOOTHER_A_ACCEL_ANGULAR"
+      ],
+      "source_refs": [
+        "tests/fixtures/nav2_upstream_params/nav2_params.yaml:controller_server.ros__parameters.FollowPath.az_max",
+        "tests/fixtures/nav2_upstream_params/nav2_params.yaml:velocity_smoother.ros__parameters.max_accel[2]"
+      ],
+      "evidence_refs": [
+        "nav2_plugin:nav2_mppi_controller::MPPIController"
+      ],
+      "suggested_fix": "Reconcile the two declarations: either raise `velocity_smoother.max_accel[2]` to 3.5, or lower `az_max` to 3.2, whichever matches the platform's real capability.",
+      "counterexample": null
+    }
+  ],
+  "coverage_gaps": []
+}

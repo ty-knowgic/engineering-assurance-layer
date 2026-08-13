@@ -1,0 +1,61 @@
+{
+  "description": "Provenance for the third-party artifacts EAL's demo and regression tests run against. Every file is byte-for-byte upstream; none were edited.",
+  "upstream": {
+    "repository": "https://github.com/ros-navigation/navigation2",
+    "commit": "075b29611a7d21ff4f1c74077a17c672e708001c",
+    "commit_date": "2026-08-13T16:11:49Z",
+    "retrieved": "2026-08-13",
+    "license": "Apache-2.0"
+  },
+  "verify_command": "curl -sL https://raw.githubusercontent.com/ros-navigation/navigation2/075b29611a7d21ff4f1c74077a17c672e708001c/<upstream_path> | shasum -a 256",
+  "files": [
+    {
+      "local_path": "tests/fixtures/nav2_upstream_params/nav2_no_map_params.yaml",
+      "upstream_path": "nav2_system_tests/src/gps_navigation/nav2_no_map_params.yaml",
+      "sha256": "d722a028a3a4320f8262699d3990e645cdb060d3ec8e0a5d044163722d4e4f32",
+      "bytes": 12105
+    },
+    {
+      "local_path": "tests/fixtures/nav2_upstream_params/nav2_params.yaml",
+      "upstream_path": "nav2_bringup/params/nav2_params.yaml",
+      "sha256": "da9a77a176b8ff67cefc72958f61d279a4d5ed162707b3fec0f0e453aee02450",
+      "bytes": 18628
+    },
+    {
+      "local_path": "tests/fixtures/nav2_upstream_params/nav2_system_params.yaml",
+      "upstream_path": "nav2_system_tests/src/system/nav2_system_params.yaml",
+      "sha256": "98530999f45f8aa37ac67b907823b7e723697aba2622d9b4a9ec6a71070209cc",
+      "bytes": 11430
+    },
+    {
+      "local_path": "tests/fixtures/nav2_upstream_bt/follow_point.xml",
+      "upstream_path": "nav2_bt_navigator/behavior_trees/follow_point.xml",
+      "sha256": "5c9b756ebf804b66af5f727ecba8799cb5cd41795400c4612ee63328e47df8c3",
+      "bytes": 1260
+    },
+    {
+      "local_path": "tests/fixtures/nav2_upstream_bt/navigate_through_poses_w_replanning_and_recovery.xml",
+      "upstream_path": "nav2_bt_navigator/behavior_trees/navigate_through_poses_w_replanning_and_recovery.xml",
+      "sha256": "8a6d8d6432a1bdfb13af9e35be4f76fbbb3caba63d569b578f9a6fe465b4c860",
+      "bytes": 4525
+    },
+    {
+      "local_path": "tests/fixtures/nav2_upstream_bt/navigate_to_pose_w_replanning_and_recovery.xml",
+      "upstream_path": "nav2_bt_navigator/behavior_trees/navigate_to_pose_w_replanning_and_recovery.xml",
+      "sha256": "000f8e0020db54aee652837987ad4f2d82e633a588994bfcf7d26163c67fc7e6",
+      "bytes": 4076
+    },
+    {
+      "local_path": "tests/fixtures/nav2_upstream_bt/navigate_w_replanning_speed.xml",
+      "upstream_path": "nav2_bt_navigator/behavior_trees/navigate_w_replanning_speed.xml",
+      "sha256": "28652c656eafb6455769d367df714059fb5e66867dd568f12b0bfa537e60edd2",
+      "bytes": 1047
+    },
+    {
+      "local_path": "tests/fixtures/nav2_upstream_bt/odometry_calibration.xml",
+      "upstream_path": "nav2_bt_navigator/behavior_trees/odometry_calibration.xml",
+      "sha256": "1e7896922c1437578eb454e51141b00c2da2b4c0f6ac6c1811e92aa0be6c2faf",
+      "bytes": 1467
+    }
+  ]
+}

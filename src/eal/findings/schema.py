@@ -27,6 +27,14 @@ Categories:
   MODE_SCOPED_CONFLICT → contradiction appears when a specific mode is active
   UNSAT_IN_MODE        → signal-level unsatisfiable bound/constraint set in one mode
   SOLVER_COUNTEREXAMPLE → Z3 found a concrete counterexample
+  NAV2_ACCEL_OVERDECLARED → controller assumes stronger accel/decel than the
+      downstream velocity_smoother will pass through (unsafe-leaning direction)
+  NAV2_VELOCITY_OVERDECLARED → controller plans at speeds the smoother clamps
+      away (model-fidelity, not unsafe-leaning)
+  NAV2_LIMIT_HEADROOM  → controller is configured more conservatively than the
+      platform allows; informational
+  NAV2_HORIZON_EXCEEDS_COSTMAP → MPPI prediction horizon at max speed exceeds
+      the local costmap radius (upstream-documented rule)
 """
 
 from __future__ import annotations
@@ -61,6 +69,10 @@ class FindingCategory(str, Enum):
     MODE_SCOPED_CONFLICT = "MODE_SCOPED_CONFLICT"
     UNSAT_IN_MODE = "UNSAT_IN_MODE"
     SOLVER_COUNTEREXAMPLE = "SOLVER_COUNTEREXAMPLE"
+    NAV2_ACCEL_OVERDECLARED = "NAV2_ACCEL_OVERDECLARED"
+    NAV2_VELOCITY_OVERDECLARED = "NAV2_VELOCITY_OVERDECLARED"
+    NAV2_LIMIT_HEADROOM = "NAV2_LIMIT_HEADROOM"
+    NAV2_HORIZON_EXCEEDS_COSTMAP = "NAV2_HORIZON_EXCEEDS_COSTMAP"
 
 
 class Finding(BaseModel):

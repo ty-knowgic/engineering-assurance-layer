@@ -31,6 +31,9 @@ jobs:
       - name: Run tests
         run: pytest
 
+      - name: Verify demo reproduces byte-for-byte
+        run: python scripts/run_demo.py --check
+
       - name: "Run EAL CI smoke review (policy: ci)"
         id: review_run
         continue-on-error: true

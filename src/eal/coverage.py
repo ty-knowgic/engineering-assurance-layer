@@ -1,0 +1,215 @@
+"""
+Analysis coverage gaps — the UNKNOWN plane.
+
+A Finding says "I analyzed this and found a problem".
+A CoverageGap says "I could not analyze this, so my silence means nothing".
+
+These are deliberately kept in separate planes. Severity is an *ordered* scale
+used for gate thresholds (LOW < MEDIUM < HIGH < CRITICAL); coverage is
+*orthogonal* to it. Folding UNKNOWN into FindingSeverity would corrupt
+`severity_rank`, `highest_severity`, and every threshold comparison built on
+them, and would let an unanalyzable input masquerade as a graded result.
+
+The rule this module exists to enforce:
+
+    When EAL was asked to analyze an input and could not, it must not report
+    PASS in any machine-readable plane.
+
+Categories:
+  UNSUPPORTED_INPUT_CONSTRUCT — input contained constructs the importer does
+      not model. Whatever was in those constructs was not checked.
+  INPUT_YIELDED_NO_CONTENT    — an input file was explicitly provided but
+      contributed nothing to the IR. Nothing about it was checked.
+  NO_ANALYZABLE_CONTENT       — the merged IR has no signals, constraints, or
+      transitions, so no rule or solver check could have fired at all.
+"""
+
+from __future__ import annotations
+
+from enum import Enum
+
+from pydantic import BaseModel, Field
+
+
+class CoverageGapCategory(str, Enum):
+    UNSUPPORTED_INPUT_CONSTRUCT = "UNSUPPORTED_INPUT_CONSTRUCT"
+    INPUT_YIELDED_NO_CONTENT = "INPUT_YIELDED_NO_CONTENT"
+    NO_ANALYZABLE_CONTENT = "NO_ANALYZABLE_CONTENT"
+
+
+class AnalysisStatus(str, Enum):
+    COMPLETE = "COMPLETE"
+    INCOMPLETE = "INCOMPLETE"
+
+
+class CoverageGap(BaseModel):
+    """A region of the input that EAL did not analyze."""
+
+    id: str = Field(description="Stable ID, e.g. U-001")
+    category: CoverageGapCategory
+    title: str
+    summary: str
+    affected_input: str = Field(default="", description="Path of the input not fully analyzed")
+    unanalyzed_constructs: list[str] = Field(
+        default_factory=list,
+        description="Named constructs that were seen but not modelled",
+    )
+    suggested_fix: str = ""
+
+
+def assign_gap_ids(gaps: list[CoverageGap]) -> list[CoverageGap]:
+    """Re-assign stable U-NNN IDs in deterministic category order."""
+    order = [c.value for c in CoverageGapCategory]
+    ordered = sorted(gaps, key=lambda g: (order.index(g.category.value), g.affected_input, g.title))
+    for i, g in enumerate(ordered, start=1):
+        g.id = f"U-{i:03d}"
+    return ordered
+
+
+def analysis_status(gaps: list[CoverageGap]) -> AnalysisStatus:
+    return AnalysisStatus.INCOMPLETE if gaps else AnalysisStatus.COMPLETE
+
+
+def detect_coverage_gaps(
+    ir,
+    *,
+    bt_xml_path=None,
+    bt_unsupported_nodes: list[str] | None = None,
+    bt_contributed: bool = True,
+    model_path=None,
+    model_contributed: bool = True,
+    code_paths: list | None = None,
+    nav2_params_path=None,
+    nav2_unsupported: list[str] | None = None,
+    nav2_contributed: bool = True,
+) -> list[CoverageGap]:
+    """
+    Determine what EAL was asked to analyze but did not.
+
+    Detection is intentionally conservative: a false UNKNOWN destroys trust in
+    the gate just as surely as a false PASS does. Each rule below fires only on
+    an unambiguous signal — an importer that named the constructs it dropped, an
+    input that produced literally nothing, or an IR with nothing checkable in it.
+    """
+    gaps: list[CoverageGap] = []
+    bt_unsupported_nodes = bt_unsupported_nodes or []
+    nav2_unsupported = nav2_unsupported or []
+    code_paths = code_paths or []
+
+    # U1 — the importer told us what it threw away.
+    if bt_xml_path is not None and bt_unsupported_nodes:
+        gaps.append(CoverageGap(
+            id="U-000",
+            category=CoverageGapCategory.UNSUPPORTED_INPUT_CONSTRUCT,
+            title=f"BehaviorTree XML contains {len(bt_unsupported_nodes)} unmodelled node type(s)",
+            summary=(
+                "The BehaviorTree importer skipped node types it does not model: "
+                + ", ".join(bt_unsupported_nodes)
+                + ". Control flow expressed through these nodes was not analyzed, so the "
+                "absence of findings for those branches is not evidence of their correctness."
+            ),
+            affected_input=str(bt_xml_path),
+            unanalyzed_constructs=list(bt_unsupported_nodes),
+            suggested_fix=(
+                "Express the affected behaviour in a supported construct, or treat this "
+                "tree as outside EAL's current analysis envelope."
+            ),
+        ))
+
+    if nav2_params_path is not None and nav2_unsupported:
+        gaps.append(CoverageGap(
+            id="U-000",
+            category=CoverageGapCategory.UNSUPPORTED_INPUT_CONSTRUCT,
+            title=f"Nav2 config uses {len(nav2_unsupported)} unmodelled construct(s)",
+            summary=(
+                "The Nav2 importer has no validated parameter mapping for: "
+                + ", ".join(nav2_unsupported)
+                + ". Its motion limits were not extracted and therefore not checked."
+            ),
+            affected_input=str(nav2_params_path),
+            unanalyzed_constructs=list(nav2_unsupported),
+            suggested_fix=(
+                "Add a validated role mapping for this plugin, backed by a real "
+                "upstream params file, before relying on results for this config."
+            ),
+        ))
+
+    # U2 — an input was provided and contributed nothing.
+    if bt_xml_path is not None and not bt_contributed:
+        gaps.append(CoverageGap(
+            id="U-000",
+            category=CoverageGapCategory.INPUT_YIELDED_NO_CONTENT,
+            title="BehaviorTree XML contributed no IR content",
+            summary=(
+                "A BehaviorTree XML file was supplied but produced no signals, states, "
+                "constraints, or assumptions. Nothing in this file was checked."
+            ),
+            affected_input=str(bt_xml_path),
+            suggested_fix="Verify the file is a BehaviorTree XML in a supported dialect.",
+        ))
+
+    if nav2_params_path is not None and not nav2_contributed:
+        gaps.append(CoverageGap(
+            id="U-000",
+            category=CoverageGapCategory.INPUT_YIELDED_NO_CONTENT,
+            title="Nav2 params file contributed no IR content",
+            summary=(
+                "A Nav2 parameter file was supplied but no motion limits, frequencies, "
+                "or costmap values were extracted from it. Nothing in this file was checked."
+            ),
+            affected_input=str(nav2_params_path),
+            suggested_fix=(
+                "Verify the file declares controller_server / velocity_smoother / "
+                "local_costmap sections in the standard Nav2 layout."
+            ),
+        ))
+
+    if model_path is not None and not model_contributed:
+        gaps.append(CoverageGap(
+            id="U-000",
+            category=CoverageGapCategory.INPUT_YIELDED_NO_CONTENT,
+            title="Model YAML contributed no IR content",
+            summary=(
+                "A model YAML file was supplied but contained no recognized top-level "
+                "keys. Nothing in this file was checked."
+            ),
+            affected_input=str(model_path),
+            suggested_fix="Check the model against the schema documented in the README.",
+        ))
+
+    if code_paths and not ir.code_constants and not ir.code_comparisons:
+        gaps.append(CoverageGap(
+            id="U-000",
+            category=CoverageGapCategory.INPUT_YIELDED_NO_CONTENT,
+            title=f"Code analysis extracted nothing from {len(code_paths)} file(s)",
+            summary=(
+                "Code files were supplied but no numeric constants or comparisons were "
+                "extracted. No code/spec/model consistency check could run, so these "
+                "files are unverified rather than consistent."
+            ),
+            affected_input=", ".join(str(p) for p in code_paths),
+            suggested_fix=(
+                "Confirm the files contain module-level numeric constants or simple "
+                "numeric comparisons; EAL's static pass covers only those forms."
+            ),
+        ))
+
+    # U3 — nothing checkable survived extraction.
+    if not ir.signals and not ir.constraints and not ir.transitions:
+        gaps.append(CoverageGap(
+            id="U-000",
+            category=CoverageGapCategory.NO_ANALYZABLE_CONTENT,
+            title="No analyzable content in merged IR",
+            summary=(
+                "The merged IR contains no signals, constraints, or transitions. No "
+                "deterministic rule or solver check could have fired. A zero-finding "
+                "result here carries no assurance information."
+            ),
+            affected_input=str(getattr(ir, "spec_file", "") or ""),
+            suggested_fix=(
+                "Provide a spec with Signals/Constraints/Transitions sections, or a model "
+                "YAML supplying them."
+            ),
+        ))
+
+    return assign_gap_ids(gaps)

@@ -26,6 +26,7 @@ class PolicyDefaults:
     min_severity: str
     strictness: str
     description: str
+    fail_on_unknown: bool = True
 
 
 @dataclass(frozen=True)
@@ -37,12 +38,15 @@ class ResolvedPolicy:
     fail_on_source: str
     min_severity_source: str
     strictness_source: str
+    fail_on_unknown: bool = True
+    fail_on_unknown_source: str = "profile_default"
 
     def source_map(self) -> dict[str, str]:
         return {
             "fail_on_severity": self.fail_on_source,
             "min_severity": self.min_severity_source,
             "strictness": self.strictness_source,
+            "fail_on_unknown": self.fail_on_unknown_source,
         }
 
 
@@ -52,6 +56,9 @@ _PROFILE_DEFAULTS: dict[PolicyProfile, PolicyDefaults] = {
         min_severity="LOW",
         strictness="balanced",
         description="Local exploratory run: no gate failure by default.",
+        # Local runs stay non-blocking by design. Reporting is still honest:
+        # analysis_status/UNKNOWN appears in every artifact regardless.
+        fail_on_unknown=False,
     ),
     PolicyProfile.CI: PolicyDefaults(
         fail_on_severity="HIGH",
@@ -91,6 +98,7 @@ def resolve_policy(
     fail_on_severity: Optional[str] = None,
     min_severity: Optional[str] = None,
     strictness: Optional[str] = None,
+    fail_on_unknown: Optional[bool] = None,
 ) -> ResolvedPolicy:
     """
     Resolve effective policy values from profile defaults + explicit overrides.
@@ -109,6 +117,7 @@ def resolve_policy(
     eff_fail = (fail_on_severity or defaults.fail_on_severity).upper()
     eff_min = (min_severity or defaults.min_severity).upper()
     eff_strict = (strictness or defaults.strictness).lower()
+    eff_unknown = defaults.fail_on_unknown if fail_on_unknown is None else fail_on_unknown
 
     return ResolvedPolicy(
         profile=selected,
@@ -118,4 +127,8 @@ def resolve_policy(
         fail_on_source="explicit_flag" if fail_on_severity is not None else "profile_default",
         min_severity_source="explicit_flag" if min_severity is not None else "profile_default",
         strictness_source="explicit_flag" if strictness is not None else "profile_default",
+        fail_on_unknown=eff_unknown,
+        fail_on_unknown_source=(
+            "explicit_flag" if fail_on_unknown is not None else "profile_default"
+        ),
     )

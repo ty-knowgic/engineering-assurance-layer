@@ -242,6 +242,13 @@ def rule_timing_req_no_parameter(ir: IRSnapshot) -> list[Finding]:
         c.id for c in param_constraints
         if re.search(r"(ms|time|latency|response|delay)", c.expression_text, re.I)
     }
+    # An importer that types a constraint as TIMING and gives it a value has
+    # already declared a timing parameter; requiring a `PARAM-` id prefix would
+    # make that invisible purely because of a naming convention.
+    timing_param_names |= {
+        c.id for c in ir.constraints
+        if c.constraint_type == ConstraintType.TIMING and c.numeric_value is not None
+    }
 
     timing_asm_count = sum(
         1 for a in ir.assumptions

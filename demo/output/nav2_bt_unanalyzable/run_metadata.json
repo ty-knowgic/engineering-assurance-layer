@@ -1,0 +1,89 @@
+{
+  "run_id": "eal-DEMO-NORMALIZED",
+  "eal_version": "0.0.2",
+  "generated_at": "1970-01-01T00:00:00+00:00",
+  "inputs": {
+    "spec_file": "demo/spec/nav2_motion_limits.md",
+    "model_file": "tests/fixtures/nav2_upstream_bt/navigate_to_pose_w_replanning_and_recovery.xml",
+    "code_files": []
+  },
+  "results": {
+    "finding_count": 0,
+    "highest_severity_found": "NONE",
+    "low_count": 0,
+    "medium_count": 0,
+    "critical_count": 0,
+    "high_count": 0,
+    "status": "UNKNOWN"
+  },
+  "coverage": {
+    "analysis_status": "INCOMPLETE",
+    "gap_count": 2,
+    "gaps": [
+      {
+        "id": "U-001",
+        "category": "UNSUPPORTED_INPUT_CONSTRUCT",
+        "title": "BehaviorTree XML contains 7 unmodelled node type(s)",
+        "summary": "The BehaviorTree importer skipped node types it does not model: RecoveryNode, PipelineSequence, RateController, ReactiveSequence, Inverter, ReactiveFallback, RoundRobin. Control flow expressed through these nodes was not analyzed, so the absence of findings for those branches is not evidence of their correctness.",
+        "affected_input": "tests/fixtures/nav2_upstream_bt/navigate_to_pose_w_replanning_and_recovery.xml",
+        "unanalyzed_constructs": [
+          "RecoveryNode",
+          "PipelineSequence",
+          "RateController",
+          "ReactiveSequence",
+          "Inverter",
+          "ReactiveFallback",
+          "RoundRobin"
+        ],
+        "suggested_fix": "Express the affected behaviour in a supported construct, or treat this tree as outside EAL's current analysis envelope."
+      },
+      {
+        "id": "U-002",
+        "category": "NO_ANALYZABLE_CONTENT",
+        "title": "No analyzable content in merged IR",
+        "summary": "The merged IR contains no signals, constraints, or transitions. No deterministic rule or solver check could have fired. A zero-finding result here carries no assurance information.",
+        "affected_input": "demo/spec/nav2_motion_limits.md",
+        "unanalyzed_constructs": [],
+        "suggested_fix": "Provide a spec with Signals/Constraints/Transitions sections, or a model YAML supplying them."
+      }
+    ],
+    "notes": "analysis_status=INCOMPLETE means part of the supplied input was not analyzed. Finding counts describe the analyzed portion only."
+  },
+  "gate": {
+    "fail_on_severity": "HIGH",
+    "min_severity": "LOW",
+    "fail_on_unknown": true,
+    "failed": false,
+    "result": "UNKNOWN",
+    "exit_reason": "ANALYSIS_COVERAGE_INCOMPLETE"
+  },
+  "policy": {
+    "profile": "ci",
+    "effective": {
+      "fail_on_severity": "HIGH",
+      "min_severity": "LOW",
+      "strictness": "balanced",
+      "fail_on_unknown": true
+    },
+    "sources": {
+      "fail_on_severity": "profile_default",
+      "min_severity": "profile_default",
+      "strictness": "profile_default",
+      "fail_on_unknown": "profile_default"
+    },
+    "notes": "Precedence: explicit CLI flags override selected policy profile defaults."
+  },
+  "strictness": {
+    "level": "balanced",
+    "suppressed_finding_count": 0,
+    "suppressed_by_rule": {},
+    "notes": "Strictness filtering applies to heuristic rules only; solver and always-on deterministic rules are unaffected."
+  },
+  "artifacts": {
+    "sarif": {
+      "generated": true,
+      "file": "results.sarif"
+    }
+  },
+  "git": {"normalized_by_demo_harness": true}
+}

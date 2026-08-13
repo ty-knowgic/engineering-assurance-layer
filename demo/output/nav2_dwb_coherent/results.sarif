@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "version": "2.1.0",
+  "runs": [
+    {
+      "automationDetails": {
+        "id": "eal-DEMO-NORMALIZED"
+      },
+      "tool": {
+        "driver": {
+          "name": "engineering-assurance-layer",
+          "version": "0.0.2",
+          "rules": []
+        }
+      },
+      "invocations": [
+        {
+          "executionSuccessful": true,
+          "properties": {
+            "analysisStatus": "COMPLETE",
+            "coverageGapCount": 0
+          }
+        }
+      ],
+      "results": []
+    }
+  ]
+}

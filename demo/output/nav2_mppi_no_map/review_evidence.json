@@ -1,0 +1,45 @@
+{
+  "run_id": "eal-DEMO-NORMALIZED",
+  "generated_at": "1970-01-01T00:00:00+00:00",
+  "inputs": {
+    "spec_file": "demo/spec/nav2_motion_limits.md",
+    "model_file": null,
+    "code_files": []
+  },
+  "input_digests": {
+    "algorithm": "sha256",
+    "spec_file": {
+      "path": "demo/spec/nav2_motion_limits.md",
+      "sha256": "8e8bccd8ccd656566880866e15eaa299962748d1d0ec2bb59be21bbcc37607cb",
+      "bytes": 719
+    },
+    "model_file": null,
+    "code_files": []
+  },
+  "ir_summary": {
+    "signals": 0,
+    "states": 0,
+    "modes": 0,
+    "transitions": 0,
+    "requirements": 2,
+    "constraints": 25,
+    "assumptions": 1,
+    "code_constants": 0,
+    "code_comparisons": 0,
+    "code_evidence": 0,
+    "extraction_warnings": 2
+  },
+  "code_analysis": {
+    "analyzed_files": [],
+    "constants_extracted": 0,
+    "comparisons_extracted": 0,
+    "evidence_items": 0
+  },
+  "artifacts": {
+    "sarif": {
+      "generated": true,
+      "file": "results.sarif"
+    }
+  },
+  "git": {"normalized_by_demo_harness": true}
+}

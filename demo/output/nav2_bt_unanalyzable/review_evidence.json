@@ -1,0 +1,49 @@
+{
+  "run_id": "eal-DEMO-NORMALIZED",
+  "generated_at": "1970-01-01T00:00:00+00:00",
+  "inputs": {
+    "spec_file": "demo/spec/nav2_motion_limits.md",
+    "model_file": "tests/fixtures/nav2_upstream_bt/navigate_to_pose_w_replanning_and_recovery.xml",
+    "code_files": []
+  },
+  "input_digests": {
+    "algorithm": "sha256",
+    "spec_file": {
+      "path": "demo/spec/nav2_motion_limits.md",
+      "sha256": "8e8bccd8ccd656566880866e15eaa299962748d1d0ec2bb59be21bbcc37607cb",
+      "bytes": 719
+    },
+    "model_file": {
+      "path": "tests/fixtures/nav2_upstream_bt/navigate_to_pose_w_replanning_and_recovery.xml",
+      "sha256": "000f8e0020db54aee652837987ad4f2d82e633a588994bfcf7d26163c67fc7e6",
+      "bytes": 4076
+    },
+    "code_files": []
+  },
+  "ir_summary": {
+    "signals": 0,
+    "states": 21,
+    "modes": 0,
+    "transitions": 0,
+    "requirements": 2,
+    "constraints": 0,
+    "assumptions": 3,
+    "code_constants": 0,
+    "code_comparisons": 0,
+    "code_evidence": 0,
+    "extraction_warnings": 3
+  },
+  "code_analysis": {
+    "analyzed_files": [],
+    "constants_extracted": 0,
+    "comparisons_extracted": 0,
+    "evidence_items": 0
+  },
+  "artifacts": {
+    "sarif": {
+      "generated": true,
+      "file": "results.sarif"
+    }
+  },
+  "git": {"normalized_by_demo_harness": true}
+}
