@@ -456,7 +456,7 @@ even if empty (explicit status markers prevent silent omissions).
 | `review_summary.md` | Human-readable summary: finding counts, IR summary, top findings |
 | `constraint_violations.md` | All CRITICAL and HIGH findings with full detail |
 | `missing_assumptions.md` | MISSING_ASSUMPTION findings with suggested fixes |
-| `counterexamples.json` | Machine-readable counterexample structures from Z3 and rule checks |
+| `counterexamples.json` | Solver evidence, separated by kind: minimal unsat cores, witnesses, structural conflicts |
 | `review_evidence.json` | Run provenance: inputs, SHA-256 of every input file, IR summary, git info, timestamp |
 | `ir_snapshot.json` | Full IR dump, including selective requirement linkage metadata (`requirement_classes`, `parsed_constraints`, `linkage_reasons`) |
 | `findings.json` | All findings in stable schema (id, severity, category, title, summary, fix) |
@@ -725,6 +725,44 @@ edit looks harmless in a diff.
 | Full numeric system in a specific mode → UNSAT | `MODE_SCOPED_CONFLICT` | CRITICAL |
 | Transition is both required and forbidden | `UNREACHABLE_STATE` | CRITICAL |
 
+### Unsat cores, not counterexamples
+
+An unsatisfiable system has no satisfying assignment, so there is no model to
+report and nothing that can honestly be called a counterexample. What EAL
+reports instead is a **minimal unsat core**: the smallest set of declared facts
+that is still jointly contradictory. That is the more useful artifact anyway —
+it names the handful of declarations a human has to reconcile rather than
+everything that happened to be asserted.
+
+Facts are added to the solver as `selector => fact` and satisfiability is
+queried with the selectors as assumptions, so a fact can genuinely be withdrawn.
+Z3's `unsat_core()` returns an unsat but not necessarily irreducible subset, so
+each core is then minimized by deletion — drop one fact, re-check, keep the drop
+if the remainder is still unsat. The result is irreducible, and
+`tests/test_unsat_core.py` verifies that by brute force over proper subsets
+rather than trusting the minimizer that produced it.
+
+Cores name **signal bounds and the one-mode-active rule**, not only constraint
+IDs, because a bound is frequently half of the contradiction. On
+`examples/robotics_arm` the core is:
+
+```
+declared bound joint_speed >= 1.5
+joint_speed <= 1.2 rad/s when mode = CALIBRATION
+```
+
+Two facts, one of them a bound that earlier output never mentioned, and with the
+redundant `REQC-REQ-001-01` correctly excluded.
+
+`counterexamples.json` separates the kinds and counts them apart, so nothing is
+filed as a counterexample that is not one:
+
+| Key | Contents |
+|-----|----------|
+| `counterexamples` / `counterexample_count` | Witness models. Currently always empty — nothing produces them yet |
+| `unsat_cores` / `unsat_core_count` | Minimal cores, each with `core`, `core_size`, `core_constraint_ids`, `minimal` |
+| `other_evidence` | Non-solver findings, e.g. `structural_conflict` |
+
 ---
 
 ## Tests
@@ -750,6 +788,7 @@ tests/test_coverage.py     — UNKNOWN plane; real upstream Nav2 trees must neve
 tests/test_nav2_params.py  — Nav2 param extraction vs hand-read values on real upstream files
 tests/test_nav2_coherence.py — Nav2 limit-coherence and horizon checks, incl. direction regression
 tests/test_demo.py         — demo fixture provenance and committed-output integrity
+tests/test_unsat_core.py   — core minimality verified by brute force over proper subsets
 ```
 
 ---
@@ -783,10 +822,15 @@ Short version:
   distinguishing temporal from spatial use, so a requirement like "must fit
   within the costmap" is misread as a timing requirement. Known false positive,
   not yet fixed
-- `counterexamples.json` entries for UNSAT results list the asserted constraint
-  IDs and `z3_result: "unsat"`. No unsat core is computed and no witness model
-  exists for an UNSAT system, so these are **not** counterexamples in the
-  model-theoretic sense
+- No genuine counterexamples are produced. Every solver finding is an UNSAT
+  result, which has no model to report; the tool emits minimal unsat cores
+  instead (see below). Producing a witness would mean searching for a model
+  that violates a desired property, which is not implemented
+- The `UNREACHABLE_STATE` check (transition both required and forbidden) cannot
+  be reached through any supported input. The spec extractor never marks a
+  transition forbidden, and the model merger dedups transitions by
+  `(from, to)`, so a model entry cannot flip a pair the spec already declared.
+  The rule fires only on hand-constructed IR
 
 ---
 

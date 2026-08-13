@@ -291,21 +291,52 @@ def _write_missing_assumptions(out: Path, findings: list[Finding]) -> None:
 
 
 def _write_counterexamples(out: Path, findings: list[Finding]) -> None:
-    examples = [
-        {
+    """
+    Write solver evidence, separated by what kind of evidence it actually is.
+
+    An UNSAT system has no model, so it yields no counterexample — only a
+    minimal unsat core. Filing cores under `counterexamples` would overstate
+    what the solver produced, so the two are counted and listed apart. The file
+    name is kept for interface stability.
+    """
+    def entry(f: Finding) -> dict:
+        return {
             "finding_id": f.id,
             "severity": f.severity.value,
             "category": f.category.value,
             "title": f.title,
-            "counterexample": f.counterexample,
+            "evidence": f.counterexample,
         }
-        for f in findings
-        if f.counterexample is not None
-    ]
+
+    evidence = [(f.counterexample.get("kind"), entry(f))
+                for f in findings if f.counterexample is not None]
+
+    witnesses = [e for kind, e in evidence if kind == "witness"]
+    cores = [e for kind, e in evidence if kind == "unsat_core"]
+    other = [e for kind, e in evidence if kind not in ("witness", "unsat_core")]
+
+    if witnesses:
+        status = "counterexamples_found"
+    elif cores or other:
+        status = "unsat_cores_only"
+    else:
+        status = "none"
+
     payload = {
-        "counterexample_count": len(examples),
-        "status": "none" if not examples else "counterexamples_found",
-        "counterexamples": examples,
+        "counterexample_count": len(witnesses),
+        "unsat_core_count": len(cores),
+        "other_evidence_count": len(other),
+        "status": status,
+        "notes": (
+            "A counterexample is a concrete assignment that violates a property. "
+            "An unsatisfiable system has no assignment at all, so it produces a "
+            "minimal unsat core instead — the smallest set of declared facts that "
+            "is jointly contradictory. The two are not interchangeable and are "
+            "reported separately."
+        ),
+        "counterexamples": witnesses,
+        "unsat_cores": cores,
+        "other_evidence": other,
     }
     (out / "counterexamples.json").write_text(
         json.dumps(payload, indent=2), encoding="utf-8"

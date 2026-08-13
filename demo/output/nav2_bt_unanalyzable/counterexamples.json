@@ -1,5 +1,10 @@
 {
   "counterexample_count": 0,
+  "unsat_core_count": 0,
+  "other_evidence_count": 0,
   "status": "none",
-  "counterexamples": []
+  "notes": "A counterexample is a concrete assignment that violates a property. An unsatisfiable system has no assignment at all, so it produces a minimal unsat core instead \u2014 the smallest set of declared facts that is jointly contradictory. The two are not interchangeable and are reported separately.",
+  "counterexamples": [],
+  "unsat_cores": [],
+  "other_evidence": []
 }

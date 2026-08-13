@@ -6,11 +6,31 @@ Checks performed:
   2. Mode-scoped contradictions (constraints unsat only in specific modes)
   3. Signal-level unsat in mode (bounds + mode-scoped limits)
   4. Impossible transition combinations (required + forbidden)
+
+## Unsat cores are not counterexamples
+
+An UNSAT system has no satisfying assignment, so there is no model to report and
+nothing that can honestly be called a counterexample. What can be reported is a
+*minimal unsat core*: the smallest subset of asserted facts that is still
+contradictory. That is the useful artifact anyway — it names the handful of
+declarations a human has to reconcile, instead of the whole asserted set.
+
+Every assertion is tracked, so cores can name signal bounds and the
+one-mode-active rule, not only constraint IDs. Z3's own `unsat_core()` gives an
+unsat but not necessarily irreducible subset, so each core is then minimized by
+deletion: drop one element, re-check, keep the drop if the remainder is still
+unsat. The result is irreducible — no proper subset of it is unsat — which is
+what lets `minimal: true` be asserted rather than hoped for.
+
+Findings carry these under `evidence.kind == "unsat_core"`. Nothing here emits
+`kind == "witness"`; producing genuine counterexamples would mean searching for
+a model that violates a desired property, which this module does not do.
 """
 
 from __future__ import annotations
 
 import logging
+from dataclasses import dataclass, field
 from typing import Optional
 
 from eal.findings.schema import Finding, FindingCategory, FindingSeverity
@@ -114,48 +134,184 @@ def _constraint_exprs(
     return exprs
 
 
+@dataclass
+class _SolverBundle:
+    """
+    A built solver plus everything needed to explain an UNSAT result.
+
+    Facts are added as `selector => fact` with a fresh boolean selector, and
+    satisfiability is queried as `check(*selectors)`. They are deliberately not
+    added with `assert_and_track`: that asserts each fact *hard*, so omitting a
+    tracker from a later `check()` does not actually retract the fact, the
+    system stays unsat no matter what is dropped, and deletion-based
+    minimization happily shrinks the core to the empty set. Selector
+    implications make omission real, which is what the minimization below
+    depends on.
+    """
+
+    solver: z3.Solver
+    signal_vars: dict[str, z3.ArithRef] = field(default_factory=dict)
+    mode_vars: dict[str, z3.BoolRef] = field(default_factory=dict)
+    # selector label -> the boolean literal enabling that fact
+    selectors: dict[str, z3.BoolRef] = field(default_factory=dict)
+    # selector label -> human-readable description of the fact
+    labels: dict[str, str] = field(default_factory=dict)
+    # selector label -> constraint id, for the subset that came from constraints
+    label_constraints: dict[str, str] = field(default_factory=dict)
+
+    def check(self, assumptions: Optional[list[z3.BoolRef]] = None):
+        """Satisfiability with every fact enabled, plus any scenario assumptions."""
+        return self.solver.check(*list(self.selectors.values()), *(assumptions or []))
+
+
 def _build_solver(
     ir: IRSnapshot,
     constraints: list[Constraint],
     with_mode_logic: bool,
-) -> tuple[z3.Solver, dict[str, z3.ArithRef], dict[str, z3.BoolRef]]:
+) -> _SolverBundle:
+    """
+    Build a solver with every assertion individually tracked.
+
+    Tracking is unconditional rather than enabled only on failure: a second,
+    differently-built solver could disagree with the first about whether the
+    system is UNSAT at all, and then the reported core would not explain the
+    reported finding.
+    """
     solver = z3.Solver()
-    signal_vars: dict[str, z3.ArithRef] = {}
+    solver.set(unsat_core=True)
+    bundle = _SolverBundle(solver=solver)
+
+    def track(label: str, expr: z3.BoolRef, description: str, con_id: str | None = None) -> None:
+        # Selector names must be unique within a solver.
+        unique = label
+        suffix = 2
+        while unique in bundle.labels:
+            unique = f"{label}#{suffix}"
+            suffix += 1
+        selector = z3.Bool(unique)
+        bundle.selectors[unique] = selector
+        bundle.labels[unique] = description
+        if con_id is not None:
+            bundle.label_constraints[unique] = con_id
+        solver.add(z3.Implies(selector, expr))
 
     for sig in ir.signals:
         x = z3.Real(sig.name)
-        signal_vars[sig.name] = x
+        bundle.signal_vars[sig.name] = x
         if sig.bounds is None:
             continue
         if sig.bounds.min is not None:
-            solver.add(x >= sig.bounds.min)
+            track(
+                f"BOUND:{sig.name}:min", x >= sig.bounds.min,
+                f"declared bound {sig.name} >= {sig.bounds.min}",
+            )
         if sig.bounds.max is not None:
-            solver.add(x <= sig.bounds.max)
+            track(
+                f"BOUND:{sig.name}:max", x <= sig.bounds.max,
+                f"declared bound {sig.name} <= {sig.bounds.max}",
+            )
 
-    mode_vars: dict[str, z3.BoolRef] = {}
     if with_mode_logic:
-        mode_names = _collect_modes(ir, constraints)
-        for mode in mode_names:
-            mode_vars[mode] = z3.Bool(f"mode_{mode}")
-        if mode_vars:
-            # Exactly one mode active.
-            solver.add(z3.PbEq([(v, 1) for v in mode_vars.values()], 1))
+        for mode in _collect_modes(ir, constraints):
+            bundle.mode_vars[mode] = z3.Bool(f"mode_{mode}")
+        if bundle.mode_vars:
+            track(
+                "MODE:exactly_one_active",
+                z3.PbEq([(v, 1) for v in bundle.mode_vars.values()], 1),
+                "exactly one mode is active at a time",
+            )
 
     for con in constraints:
-        exprs = _constraint_exprs(con, signal_vars)
+        exprs = _constraint_exprs(con, bundle.signal_vars)
         if not exprs:
             continue
 
-        scoped_modes = [m for m in _constraint_modes(con) if m in mode_vars]
-        if with_mode_logic and scoped_modes:
-            cond = z3.Or([mode_vars[m] for m in scoped_modes])
-            for _, expr in exprs:
-                solver.add(z3.Implies(cond, expr))
-        else:
-            for _, expr in exprs:
-                solver.add(expr)
+        scoped_modes = [m for m in _constraint_modes(con) if m in bundle.mode_vars]
+        for sig_name, expr in exprs:
+            if with_mode_logic and scoped_modes:
+                cond = z3.Or([bundle.mode_vars[m] for m in scoped_modes])
+                asserted = z3.Implies(cond, expr)
+                description = (
+                    f"{con.expression_text} (applies in "
+                    f"{', '.join(scoped_modes)})"
+                )
+            else:
+                asserted = expr
+                description = con.expression_text
+            track(f"{con.id}:{sig_name}", asserted, description, con_id=con.id)
 
-    return solver, signal_vars, mode_vars
+    return bundle
+
+
+def _minimal_unsat_core(
+    bundle: _SolverBundle,
+    assumptions: Optional[list[z3.BoolRef]] = None,
+) -> list[str]:
+    """
+    Return an irreducible unsat core as tracker labels.
+
+    Z3's `unsat_core()` is unsat but not guaranteed minimal, so this shrinks it
+    by deletion: for each element, re-check without it and keep the removal when
+    the remainder is still unsat. On return, no proper subset of the result is
+    unsat — which is what makes `minimal: true` a claim and not a hope.
+
+    Scenario assumptions (such as "mode X is active") are held fixed throughout.
+    They frame the question being asked rather than being facts under suspicion,
+    so they are never minimized away and never reported as part of the core.
+    """
+    assumptions = assumptions or []
+    core_names = [str(c) for c in bundle.solver.unsat_core()]
+    # Keep only our own selectors; scenario assumptions can appear here too.
+    core = [name for name in core_names if name in bundle.selectors]
+
+    i = 0
+    while i < len(core):
+        candidate = core[:i] + core[i + 1:]
+        literals = [bundle.selectors[name] for name in candidate]
+        if bundle.solver.check(*(literals + assumptions)) == z3.unsat:
+            core = candidate  # this fact was not needed
+        else:
+            i += 1
+    return sorted(core)
+
+
+def _core_evidence(
+    bundle: _SolverBundle,
+    core_labels: list[str],
+    **extra,
+) -> dict:
+    """Build the machine-readable explanation attached to an UNSAT finding."""
+    return {
+        "kind": "unsat_core",
+        "z3_result": "unsat",
+        "minimal": True,
+        "note": (
+            "An unsatisfiable system has no model, so there is no counterexample "
+            "to report. This is a minimal unsat core: the listed facts are jointly "
+            "contradictory and no proper subset of them is."
+        ),
+        "core_size": len(core_labels),
+        "core": [
+            {
+                "label": label,
+                "constraint_id": bundle.label_constraints.get(label),
+                "fact": bundle.labels.get(label, label),
+            }
+            for label in core_labels
+        ],
+        "core_constraint_ids": sorted(
+            {
+                bundle.label_constraints[label]
+                for label in core_labels
+                if label in bundle.label_constraints
+            }
+        ),
+        **extra,
+    }
+
+
+def _core_summary(bundle: _SolverBundle, core_labels: list[str]) -> str:
+    return "; ".join(bundle.labels.get(label, label) for label in core_labels)
 
 
 def _source_refs_for_constraints(constraints: list[Constraint]) -> list[str]:
@@ -189,9 +345,12 @@ def _check_signal_bounds_vs_constraints(ir: IRSnapshot) -> list[Finding]:
         global_relevant = [c for c in relevant if _is_global_constraint(c)]
 
         if global_relevant:
-            solver, _, _ = _build_solver(ir, global_relevant, with_mode_logic=False)
-            if solver.check() == z3.unsat:
-                con_ids = [c.id for c in global_relevant]
+            bundle = _build_solver(ir, global_relevant, with_mode_logic=False)
+            if bundle.check() == z3.unsat:
+                core = _minimal_unsat_core(bundle)
+                core_ids = sorted(
+                    {bundle.label_constraints[c] for c in core if c in bundle.label_constraints}
+                )
                 findings.append(
                     Finding(
                         id="TBD",
@@ -199,24 +358,25 @@ def _check_signal_bounds_vs_constraints(ir: IRSnapshot) -> list[Finding]:
                         category=FindingCategory.GLOBAL_CONSTRAINT_CONFLICT,
                         title=f"Z3: Unsatisfiable global constraints for signal '{sig.name}'",
                         summary=(
-                            f"Signal '{sig.name}' bounds and global constraint set "
-                            f"[{', '.join(con_ids)}] are unsatisfiable."
+                            f"Signal '{sig.name}' cannot take any value. Minimal "
+                            f"contradictory set ({len(core)} fact(s)): "
+                            f"{_core_summary(bundle, core)}."
                         ),
                         details=(
                             "Mode-independent constraints already contradict this signal's "
-                            "declared bounds."
+                            "declared bounds. Only the facts listed in the core need to be "
+                            "reconciled; the rest of the constraint set is not involved."
                         ),
-                        related_ir_nodes=[sig.name] + con_ids,
-                        source_refs=_source_refs_for_constraints(global_relevant),
+                        related_ir_nodes=[sig.name] + core_ids,
+                        source_refs=_source_refs_for_constraints(
+                            [c for c in global_relevant if c.id in core_ids]
+                        ) or _source_refs_for_constraints(global_relevant),
                         suggested_fix=(
                             f"Reconcile global limits for '{sig.name}' with its declared bounds."
                         ),
-                        counterexample={
-                            "scope": "global",
-                            "signal": sig.name,
-                            "conflicting_constraints": con_ids,
-                            "z3_result": "unsat",
-                        },
+                        counterexample=_core_evidence(
+                            bundle, core, scope="global", signal=sig.name,
+                        ),
                     )
                 )
 
@@ -235,17 +395,16 @@ def _check_signal_bounds_vs_constraints(ir: IRSnapshot) -> list[Finding]:
             if not has_scoped:
                 continue
 
-            solver, _, mode_vars = _build_solver(ir, mode_constraints, with_mode_logic=True)
-            if mode not in mode_vars:
+            bundle = _build_solver(ir, mode_constraints, with_mode_logic=True)
+            if mode not in bundle.mode_vars:
                 continue
 
-            solver.push()
-            solver.add(mode_vars[mode])
-            result = solver.check()
-            solver.pop()
-
-            if result == z3.unsat:
-                con_ids = [c.id for c in mode_constraints]
+            active = [bundle.mode_vars[mode]]
+            if bundle.check(active) == z3.unsat:
+                core = _minimal_unsat_core(bundle, assumptions=active)
+                core_ids = sorted(
+                    {bundle.label_constraints[c] for c in core if c in bundle.label_constraints}
+                )
                 findings.append(
                     Finding(
                         id="TBD",
@@ -253,25 +412,25 @@ def _check_signal_bounds_vs_constraints(ir: IRSnapshot) -> list[Finding]:
                         category=FindingCategory.UNSAT_IN_MODE,
                         title=f"Z3: Unsatisfiable constraints for signal '{sig.name}' in mode '{mode}'",
                         summary=(
-                            f"Signal '{sig.name}' is unsatisfiable when mode '{mode}' is active "
-                            f"under constraints [{', '.join(con_ids)}]."
+                            f"Signal '{sig.name}' cannot take any value while mode '{mode}' is "
+                            f"active. Minimal contradictory set ({len(core)} fact(s)): "
+                            f"{_core_summary(bundle, core)}."
                         ),
                         details=(
                             "This conflict is mode-scoped: the same signal may remain satisfiable "
-                            "outside the failing mode."
+                            "outside the failing mode. Only the facts listed in the core need to "
+                            "be reconciled."
                         ),
-                        related_ir_nodes=[sig.name] + con_ids,
-                        source_refs=_source_refs_for_constraints(mode_constraints),
+                        related_ir_nodes=[sig.name] + core_ids,
+                        source_refs=_source_refs_for_constraints(
+                            [c for c in mode_constraints if c.id in core_ids]
+                        ) or _source_refs_for_constraints(mode_constraints),
                         suggested_fix=(
                             f"Reconcile '{sig.name}' bounds and limits specific to mode '{mode}'."
                         ),
-                        counterexample={
-                            "scope": "mode",
-                            "mode": mode,
-                            "signal": sig.name,
-                            "conflicting_constraints": con_ids,
-                            "z3_result": "unsat",
-                        },
+                        counterexample=_core_evidence(
+                            bundle, core, scope="mode", mode=mode, signal=sig.name,
+                        ),
                     )
                 )
 
@@ -293,9 +452,12 @@ def _check_joint_constraint_satisfiability(ir: IRSnapshot) -> list[Finding]:
 
     global_numeric = [c for c in all_numeric if _is_global_constraint(c)]
     if len(global_numeric) >= 2:
-        solver, _, _ = _build_solver(ir, global_numeric, with_mode_logic=False)
-        if solver.check() == z3.unsat:
-            con_ids = [c.id for c in global_numeric]
+        bundle = _build_solver(ir, global_numeric, with_mode_logic=False)
+        if bundle.check() == z3.unsat:
+            core = _minimal_unsat_core(bundle)
+            core_ids = sorted(
+                {bundle.label_constraints[c] for c in core if c in bundle.label_constraints}
+            )
             findings.append(
                 Finding(
                     id="TBD",
@@ -303,20 +465,21 @@ def _check_joint_constraint_satisfiability(ir: IRSnapshot) -> list[Finding]:
                     category=FindingCategory.GLOBAL_CONSTRAINT_CONFLICT,
                     title="Z3: Global constraint system is unsatisfiable",
                     summary=(
-                        "Mode-independent constraints and bounds have no satisfying assignment."
+                        f"Mode-independent constraints and bounds have no satisfying "
+                        f"assignment. Minimal contradictory set ({len(core)} fact(s)): "
+                        f"{_core_summary(bundle, core)}."
                     ),
                     details=(
-                        f"Constraints checked: {', '.join(con_ids)}. "
+                        f"{len(global_numeric)} constraint(s) were asserted; only "
+                        f"{len(core_ids)} of them appear in the minimal core. "
                         "The contradiction exists regardless of active mode."
                     ),
-                    related_ir_nodes=con_ids,
-                    source_refs=_source_refs_for_constraints(global_numeric),
+                    related_ir_nodes=core_ids,
+                    source_refs=_source_refs_for_constraints(
+                        [c for c in global_numeric if c.id in core_ids]
+                    ) or _source_refs_for_constraints(global_numeric),
                     suggested_fix="Resolve contradictions in global bounds/constraints.",
-                    counterexample={
-                        "scope": "global",
-                        "constraints_asserted": con_ids,
-                        "z3_result": "unsat",
-                    },
+                    counterexample=_core_evidence(bundle, core, scope="global"),
                 )
             )
 
@@ -324,22 +487,20 @@ def _check_joint_constraint_satisfiability(ir: IRSnapshot) -> list[Finding]:
     if not has_mode_scoped:
         return findings
 
-    solver, _, mode_vars = _build_solver(ir, all_numeric, with_mode_logic=True)
-    for mode in sorted(mode_vars):
-        solver.push()
-        solver.add(mode_vars[mode])
-        result = solver.check()
-        solver.pop()
-
-        if result != z3.unsat:
+    bundle = _build_solver(ir, all_numeric, with_mode_logic=True)
+    for mode in sorted(bundle.mode_vars):
+        active = [bundle.mode_vars[mode]]
+        if bundle.check(active) != z3.unsat:
             continue
 
-        active_constraints = [
-            c.id
-            for c in all_numeric
+        core = _minimal_unsat_core(bundle, assumptions=active)
+        core_ids = sorted(
+            {bundle.label_constraints[c] for c in core if c in bundle.label_constraints}
+        )
+        asserted_count = len([
+            c for c in all_numeric
             if _is_global_constraint(c) or mode in _constraint_modes(c)
-        ]
-        active_nodes = list(dict.fromkeys(active_constraints))
+        ])
         findings.append(
             Finding(
                 id="TBD",
@@ -347,22 +508,23 @@ def _check_joint_constraint_satisfiability(ir: IRSnapshot) -> list[Finding]:
                 category=FindingCategory.MODE_SCOPED_CONFLICT,
                 title=f"Z3: Constraint system is unsatisfiable in mode '{mode}'",
                 summary=(
-                    f"When mode '{mode}' is active, numeric constraints are jointly unsatisfiable."
+                    f"When mode '{mode}' is active, numeric constraints are jointly "
+                    f"unsatisfiable. Minimal contradictory set ({len(core)} fact(s)): "
+                    f"{_core_summary(bundle, core)}."
                 ),
                 details=(
+                    f"{asserted_count} constraint(s) apply in this mode; only "
+                    f"{len(core_ids)} of them appear in the minimal core. "
                     "This is a mode-local contradiction; other modes may still be satisfiable."
                 ),
-                related_ir_nodes=active_nodes,
-                source_refs=_source_refs_for_constraints(all_numeric),
+                related_ir_nodes=core_ids,
+                source_refs=_source_refs_for_constraints(
+                    [c for c in all_numeric if c.id in core_ids]
+                ) or _source_refs_for_constraints(all_numeric),
                 suggested_fix=(
                     f"Reconcile constraints that apply in mode '{mode}' or relax mode-specific bounds."
                 ),
-                counterexample={
-                    "scope": "mode",
-                    "mode": mode,
-                    "constraints_asserted": active_nodes,
-                    "z3_result": "unsat",
-                },
+                counterexample=_core_evidence(bundle, core, scope="mode", mode=mode),
             )
         )
 
@@ -417,6 +579,10 @@ def _check_impossible_mode_combinations(ir: IRSnapshot) -> list[Finding]:
                         "allowed or forbidden. Remove one of the conflicting definitions."
                     ),
                     counterexample={
+                        # Structural contradiction found by direct comparison, not
+                        # by the solver — labelled so it is not mistaken for either
+                        # a solver core or a model witness.
+                        "kind": "structural_conflict",
                         "from_state": trans.from_state,
                         "to_state": trans.to_state,
                         "conflict": "transition is both required and forbidden",
