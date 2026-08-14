@@ -1,0 +1,77 @@
+Engineering Assurance Layer (EAL)
+Copyright 2026 Knowgic Technology
+
+Knowgic Technology
+Waterloo, Ontario, Canada
+https://github.com/ty-knowgic/engineering-assurance-layer
+
+This product includes software developed at Knowgic Technology.
+
+Licensed under the Apache License, Version 2.0. You may obtain a copy of the
+License in the LICENSE file in this repository, or at
+http://www.apache.org/licenses/LICENSE-2.0
+
+--------------------------------------------------------------------------------
+THIRD-PARTY MATERIAL REDISTRIBUTED IN THIS REPOSITORY
+--------------------------------------------------------------------------------
+
+This repository vendors eight configuration and behavior-tree files from the
+ROS 2 Navigation2 project so that the demo and the regression tests run against
+real upstream artifacts rather than hand-written imitations of them.
+
+  Project:  Navigation2 (Nav2)
+  Source:   https://github.com/ros-navigation/navigation2
+  Commit:   075b29611a7d21ff4f1c74077a17c672e708001c
+  Retrieved: 2026-08-13
+  License:  Apache License 2.0
+
+  Navigation2 as a whole is multi-licensed (LGPL-2.1-or-later, Apache-2.0,
+  BSD-3-Clause, and Apache-2.0 AND BSD-3-Clause), with the applicable license
+  declared per package in that package's package.xml. Every file vendored here
+  comes from a package whose package.xml declares Apache-2.0:
+
+    nav2_bringup        Apache-2.0
+    nav2_bt_navigator   Apache-2.0
+    nav2_system_tests   Apache-2.0
+
+  Files, all reproduced byte-for-byte with no modification:
+
+    tests/fixtures/nav2_upstream_params/nav2_params.yaml
+      <- nav2_bringup/params/nav2_params.yaml
+    tests/fixtures/nav2_upstream_params/nav2_system_params.yaml
+      <- nav2_system_tests/src/system/nav2_system_params.yaml
+    tests/fixtures/nav2_upstream_params/nav2_no_map_params.yaml
+      <- nav2_system_tests/src/gps_navigation/nav2_no_map_params.yaml
+    tests/fixtures/nav2_upstream_bt/follow_point.xml
+    tests/fixtures/nav2_upstream_bt/navigate_through_poses_w_replanning_and_recovery.xml
+    tests/fixtures/nav2_upstream_bt/navigate_to_pose_w_replanning_and_recovery.xml
+    tests/fixtures/nav2_upstream_bt/navigate_w_replanning_speed.xml
+    tests/fixtures/nav2_upstream_bt/odometry_calibration.xml
+      <- nav2_bt_navigator/behavior_trees/
+
+  The SHA-256 of every one of these files is recorded in demo/provenance.json,
+  and both the demo and the evaluation harness verify those hashes before
+  running and refuse to proceed if any file has been altered. That mechanism
+  exists for evaluation integrity, but it doubles as evidence that this
+  redistribution is unmodified.
+
+  Navigation2 ships no NOTICE file, so no upstream attribution notices are
+  reproduced beyond those above.
+
+--------------------------------------------------------------------------------
+RUNTIME DEPENDENCIES
+--------------------------------------------------------------------------------
+
+Not redistributed by this repository; installed from PyPI at build time and
+listed here for reference only.
+
+    typer          MIT
+    pydantic       MIT
+    PyYAML         MIT
+    z3-solver      MIT
+    rich           MIT
+    jinja2         BSD-3-Clause
+
+All are permissive and compatible with Apache-2.0. Read from the installed
+package metadata on 2026-08-13 rather than from recollection; jinja2 declares
+the generic "BSD License" classifier and is BSD-3-Clause upstream.

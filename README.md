@@ -922,5 +922,12 @@ Short version:
 
 ## License
 
-This project is licensed under the [Apache License 2.0](LICENSE).
-Copyright 2026 Tetsu Yamaguchi
+Copyright 2026 **Knowgic Technology**, Waterloo, Ontario, Canada.
+
+Licensed under the [Apache License 2.0](LICENSE). See [NOTICE](NOTICE) for
+attribution, including the eight Nav2 configuration and behavior-tree files
+vendored under `tests/fixtures/` — reproduced byte-for-byte from
+[ros-navigation/navigation2](https://github.com/ros-navigation/navigation2)
+at `075b2961`, from packages that declare Apache-2.0, with SHA-256 hashes
+recorded in [`demo/provenance.json`](demo/provenance.json) and verified before
+every demo and evaluation run.

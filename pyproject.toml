@@ -1,12 +1,30 @@
 [build-system]
-requires = ["setuptools>=68", "wheel"]
+# >=77 for PEP 639 `license` as an SPDX string and `license-files`.
+requires = ["setuptools>=77", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "engineering-assurance-layer"
 version = "0.0.2"
 description = "Spec-to-constraint review tool for engineering assurance workflows"
+readme = "README.md"
 requires-python = ">=3.11"
+license = "Apache-2.0"
+license-files = ["LICENSE", "NOTICE"]
+authors = [
+    { name = "Knowgic Technology", email = "tetsuy@knowgictech.com" },
+]
+maintainers = [
+    { name = "Tetsu Yamaguchi", email = "tetsuy@knowgictech.com" },
+]
+keywords = ["assurance", "verification", "robotics", "ros2", "nav2", "sarif"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Software Development :: Quality Assurance",
+]
+
 dependencies = [
     "typer>=0.12",
     "pydantic>=2.7",
@@ -15,6 +33,10 @@ dependencies = [
     "rich>=13.0",
     "jinja2>=3.1",
 ]
+
+[project.urls]
+Homepage = "https://github.com/ty-knowgic/engineering-assurance-layer"
+Source = "https://github.com/ty-knowgic/engineering-assurance-layer"
 
 [project.scripts]
 eal = "eal.cli:app"
