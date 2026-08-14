@@ -26,10 +26,17 @@ Reporting any numeric difference would be a noise generator. Three distinctions
 are enforced here:
 
   controller > smoother, on acceleration
-      The controller rolls out and validates trajectories assuming it can
-      accelerate or brake harder than the chain will actually deliver. A
-      trajectory judged collision-free under the optimistic figure may not be.
-      Unsafe-leaning. HIGH.
+      The smoother expresses the platform's hard limit and the controller
+      expresses a behavioural desire, so declaring more than the hard limit
+      inverts the intended relationship: the controller plans with capability
+      the platform is not configured to deliver. Unsafe-leaning. HIGH.
+
+      An earlier version of this module justified the severity differently,
+      arguing that MPPI validates trajectories against its own acceleration
+      figures so a trajectory judged collision-free might not be achievable.
+      That was our inference about the internals and the maintainer did not
+      confirm it, so it has been withdrawn in favour of the role semantics
+      above, which came straight from the source. See DCR-004.
 
   controller > smoother, on velocity
       The controller plans at a speed the smoother clamps away. The robot moves
@@ -53,10 +60,16 @@ are enforced here:
 
 ## What this check does not decide
 
-Whether a mismatch is a *defect* depends on intent, which is not in the file.
-Upstream defaults can legitimately pair a generically-tuned controller with a
-platform-tuned smoother. So every finding reports both values, both YAML paths,
-and the direction — and leaves the judgement to a human.
+It reports values, paths and direction; it does not rule on whether a particular
+stack is wrong. A configuration may have reasons not visible in the file.
+
+What has changed is the burden. The role semantics above are no longer our
+reading of the source — they were stated by the Nav2 maintainer in
+ros-navigation/navigation2#6357, who also called the mismatch in the shipped
+`nav2_params.yaml` defaults "odd and unintentional". So over-declaration is no
+longer merely "a difference whose significance depends on intent"; it is a
+departure from the documented intended relationship, and a stack doing it should
+be able to say why.
 """
 
 from __future__ import annotations
@@ -84,11 +97,12 @@ _ROLE_LABEL: dict[LimitRole, str] = {
     LimitRole.A_ACCEL_ANGULAR: "angular acceleration limit",
 }
 
+# Sourced from the Nav2 maintainer rather than inferred. See MAINTAINER_SOURCE.
 _ACCEL_RATIONALE = (
-    "The controller rolls out and validates candidate trajectories against its own "
-    "figure. Because the smoother caps what actually reaches the base, a trajectory "
-    "accepted as feasible or collision-free under the controller's figure may not be "
-    "achievable in execution. This leans in the unsafe direction."
+    "The velocity_smoother expresses the platform's hard limits; the controller "
+    "expresses what it would like to do, which may legitimately be less. Declaring "
+    "more than the hard limit inverts that relationship: the controller is planning "
+    "with capability the platform is not configured to deliver."
 )
 
 _VELOCITY_RATIONALE = (
@@ -97,11 +111,23 @@ _VELOCITY_RATIONALE = (
     "prediction diverges from execution. This does not lean unsafe on its own."
 )
 
+MAINTAINER_SOURCE = (
+    "Nav2 maintainer, ros-navigation/navigation2#6357 (2026-08-14): \"they are "
+    "intended to be differently defined such that there can be different limits in "
+    "different situations... The velocity smoother is more enforcing hard "
+    "limitations than behavioral desires that a controller may compute as part of "
+    "what it would like to do.\""
+)
+
 _INTENT_CAVEAT = (
-    "Whether this is a defect depends on intent, which is not recorded in the "
-    "configuration: a generically-tuned controller paired with a platform-tuned "
-    "smoother can produce this legitimately. EAL reports both values and the "
-    "direction; the judgement is yours."
+    "The two are intended to be set independently, with the controller permitted to "
+    "sit below the platform's hard limit — but not above it. "
+    + MAINTAINER_SOURCE
+    + " Asked about this exact pair of defaults in nav2_params.yaml, the same "
+    "maintainer replied that the mismatch is \"odd and unintentional\". EAL still "
+    "reports the values and the direction rather than ruling on your configuration; "
+    "your stack may have a reason. But over-declaration is not the intended use of "
+    "this pair."
 )
 
 

@@ -78,6 +78,16 @@ it appeared at a specific change, alongside a velocity update that *was* applied
 to both sides. Still not proof of a defect — only upstream can say — but the
 question is now better posed.
 
+> **Answered, 2026-08-14.** Upstream was asked
+> ([navigation2#6357](https://github.com/ros-navigation/navigation2/issues/6357)).
+> The maintainer confirmed both halves of this section: the two limits are
+> intended to be set independently, with the smoother enforcing hard limits and
+> the controller expressing behavioural desires that may sit below them — and
+> that this particular mismatch is "odd and unintentional", proposing either
+> reverting MPPI to 2.5 or raising the smoother to 3.0. The "intentional
+> pairing" reading is therefore ruled out for this instance. The drift account
+> above stands. See DCR-004.
+
 ## Finding 2 — the drift-only signal is real but weak here
 
 The velocity change is precisely the blind spot: 0.26 → 0.5 on **both** sides,

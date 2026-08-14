@@ -744,10 +744,32 @@ reverse. Both are dismissed by any reviewer. The direction *distinction* is
 enforced at every strictness level — the conservative case is never reported as
 a mismatch.
 
-**The check does not decide whether a mismatch is a defect.** That depends on
-intent, which is not in the file: a generically-tuned controller paired with a
-platform-tuned smoother produces this legitimately. Findings report both values,
-both YAML paths, and the direction, and say so explicitly.
+**The check reports; it does not rule on your stack.** Findings give both values,
+both YAML paths and the direction, and say so explicitly.
+
+**The role semantics come from upstream, not from us.** Asked directly in
+[navigation2#6357](https://github.com/ros-navigation/navigation2/issues/6357),
+the Nav2 maintainer who wrote the velocity smoother answered:
+
+> they are intended to be differently defined such that there can be different
+> limits in different situations... The velocity smoother is more enforcing hard
+> limitations than behavioral desires that a controller may compute as part of
+> what it would like to do.
+
+So a controller sitting *below* the smoother is explicitly legitimate — which is
+why the headroom case is informational and `strict`-only — and a controller
+sitting *above* it inverts the intended relationship. Asked about this exact pair
+of shipped defaults, the same maintainer replied that the mismatch is "odd and
+unintentional".
+
+That narrows an earlier hedge. This project previously said the significance of
+a mismatch "depends on intent, which is not in the file". Intent for the pairing
+is now on the record, so over-declaration is a departure from a stated
+relationship rather than an open question. A stack may still have its reasons;
+it should be able to say what they are. See
+[DCR-004](docs/decision-changes.md) — the earlier justification for the severity
+was our own inference about MPPI internals and has been withdrawn in favour of
+the sourced explanation.
 
 If a stack has no `velocity_smoother`, the comparison is inapplicable and stays
 silent. That is not the same as UNKNOWN and does not raise a coverage gap.

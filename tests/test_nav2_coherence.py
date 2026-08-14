@@ -130,14 +130,36 @@ def test_decel_finding_names_both_values_paths_and_ratio():
     assert "1.20x" in f.title
     assert any("FollowPath.ax_min" in r for r in f.source_refs)
     assert any("max_decel[0]" in r for r in f.source_refs)
-    assert "unsafe direction" in f.details
+    assert "inverts that relationship" in f.details
 
 
-def test_findings_state_that_intent_is_not_in_the_file():
-    """The tool reports the numbers; it must not pronounce on intent."""
+def test_findings_carry_the_maintainer_source_for_the_role_semantics():
+    """
+    The severity rests on what the smoother and the controller are *for*, and
+    that is a claim about someone else's design. It must travel with its source
+    rather than being asserted. See DCR-004: the earlier justification was our
+    own inference about MPPI internals and was withdrawn.
+    """
     for f in _check("nav2_params.yaml"):
         if f.category.value in (ACCEL, VELOCITY):
-            assert "depends on intent" in f.details
+            assert "navigation2#6357" in f.details
+            assert "hard limitations" in f.details
+            assert "behavioral desires" in f.details
+
+
+def test_findings_still_do_not_rule_on_the_users_configuration():
+    """Knowing the intended relationship is not the same as judging a stack."""
+    for f in _check("nav2_params.yaml"):
+        if f.category.value == ACCEL:
+            assert "your stack may have a reason" in f.details
+
+
+def test_withdrawn_trajectory_validation_argument_is_gone():
+    """It is not to be reinstated without a source (DCR-004)."""
+    for name in ("nav2_params.yaml", "nav2_no_map_params.yaml"):
+        for f in _check(name):
+            assert "collision-free" not in f.details
+            assert "trajectory validator" not in f.details
 
 
 def test_negative_values_are_compared_by_magnitude():
