@@ -280,6 +280,9 @@ and rule-tuning without mixing passing and intentionally failing behavior.
 
 See [docs/examples.md](docs/examples.md) for a command table, and
 `examples/manifest.json` for machine-readable expectations.
+See [docs/release-drift-investigation.md](docs/release-drift-investigation.md) for
+a read-only study of how Nav2's own shipped limits moved across six releases, and
+where the acceleration mismatch EAL reports was introduced.
 See [docs/validation-review-round1.md](docs/validation-review-round1.md) for an
 integrated technical assessment of the current SMACC2, BehaviorTree, and
 ros2_control validation families.
