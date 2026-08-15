@@ -760,7 +760,13 @@ So a controller sitting *below* the smoother is explicitly legitimate — which 
 why the headroom case is informational and `strict`-only — and a controller
 sitting *above* it inverts the intended relationship. Asked about this exact pair
 of shipped defaults, the same maintainer replied that the mismatch is "odd and
-unintentional".
+unintentional", and it has since been
+[fixed upstream](https://github.com/ros-navigation/navigation2/pull/6362).
+
+The demo fixtures remain pinned to `075b2961`, which predates that fix, so they
+still exhibit the mismatch. That is deliberate — pinned provenance is what makes
+the demo reproducible — but it means the demo is a snapshot of one commit, not a
+claim about Nav2 today.
 
 That narrows an earlier hedge. This project previously said the significance of
 a mismatch "depends on intent, which is not in the file". Intent for the pairing

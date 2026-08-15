@@ -87,6 +87,20 @@ question is now better posed.
 > reverting MPPI to 2.5 or raising the smoother to 3.0. The "intentional
 > pairing" reading is therefore ruled out for this instance. The drift account
 > above stands. See DCR-004.
+>
+> **Fixed upstream, 2026-08-15.**
+> [navigation2#6362](https://github.com/ros-navigation/navigation2/pull/6362)
+> raised the smoother to match the controller (`max_accel` `[2.5, 0.0, 3.2]` →
+> `[3.0, 0.0, 3.5]`, `max_decel` correspondingly) and was merged by the
+> maintainer, tagged `backport-lyrical`. The mismatch this section traces from
+> the iron → jazzy boundary no longer exists on `main`.
+>
+> Two consequences for this repository. The drift account above is now
+> *historical* rather than current, and should be read as such. And the demo
+> corpus is pinned to `075b2961`, which predates the fix — the committed
+> fixtures still exhibit the mismatch, deliberately, because pinned provenance
+> is what makes the demo reproducible. They are a snapshot, not a claim about
+> the current state of Nav2.
 
 ## Finding 2 — the drift-only signal is real but weak here
 
