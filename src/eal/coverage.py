@@ -25,6 +25,8 @@ Categories:
   AMBIGUOUS_INPUT             — the same fact is declared more than once with
       conflicting values. The parser's reading may differ from what a human
       reading the file would conclude, so neither can be relied on.
+  INVALID_INPUT_VALUE         — a field that must be a finite number held NaN or
+      infinity. The value was withheld, so whatever depended on it was not checked.
   INCOMPLETE_COMPARISON       — a cross-artifact check ran but could not cover
       every quantity, because one side of the comparison is absent.
 """
@@ -41,6 +43,7 @@ class CoverageGapCategory(str, Enum):
     INPUT_YIELDED_NO_CONTENT = "INPUT_YIELDED_NO_CONTENT"
     NO_ANALYZABLE_CONTENT = "NO_ANALYZABLE_CONTENT"
     AMBIGUOUS_INPUT = "AMBIGUOUS_INPUT"
+    INVALID_INPUT_VALUE = "INVALID_INPUT_VALUE"
     INCOMPLETE_COMPARISON = "INCOMPLETE_COMPARISON"
 
 
@@ -103,6 +106,7 @@ def detect_coverage_gaps(
     nav2_contributed: bool = True,
     nav2_duplicate_keys: list[str] | None = None,
     nav2_unchecked_roles: list[str] | None = None,
+    nav2_invalid_values: list[str] | None = None,
 ) -> list[CoverageGap]:
     """
     Determine what EAL was asked to analyze but did not.
@@ -117,6 +121,7 @@ def detect_coverage_gaps(
     nav2_unsupported = nav2_unsupported or []
     nav2_duplicate_keys = nav2_duplicate_keys or []
     nav2_unchecked_roles = nav2_unchecked_roles or []
+    nav2_invalid_values = nav2_invalid_values or []
     code_paths = code_paths or []
 
     # U1 — the importer told us what it threw away.
@@ -145,15 +150,17 @@ def detect_coverage_gaps(
             category=CoverageGapCategory.UNSUPPORTED_INPUT_CONSTRUCT,
             title=f"Nav2 config uses {len(nav2_unsupported)} unmodelled construct(s)",
             summary=(
-                "The Nav2 importer has no validated parameter mapping for: "
+                "The Nav2 importer did not model or evaluate: "
                 + ", ".join(nav2_unsupported)
-                + ". Its motion limits were not extracted and therefore not checked."
+                + ". Motion limits declared there were not extracted and therefore not checked."
             ),
             affected_input=str(nav2_params_path),
             unanalyzed_constructs=list(nav2_unsupported),
             suggested_fix=(
-                "Add a validated role mapping for this plugin, backed by a real "
-                "upstream params file, before relying on results for this config."
+                "Add a validated role mapping for an unsupported plugin, backed by a real "
+                "upstream params file; for additional controller plugins, review each "
+                "against the smoother separately. Do not rely on results for this config "
+                "until then."
             ),
         ))
 
@@ -172,6 +179,23 @@ def detect_coverage_gaps(
             affected_input=str(nav2_params_path),
             unanalyzed_constructs=list(nav2_duplicate_keys),
             suggested_fix="Remove the duplicate declarations so the file has one reading.",
+        ))
+
+    if nav2_params_path is not None and nav2_invalid_values:
+        gaps.append(CoverageGap(
+            id="U-000",
+            category=CoverageGapCategory.INVALID_INPUT_VALUE,
+            title=f"Nav2 config holds {len(nav2_invalid_values)} non-finite limit value(s)",
+            summary=(
+                "These fields are NaN or infinity, which is not a limit that can be "
+                "compared: " + ", ".join(nav2_invalid_values)
+                + ". The values were withheld, so the quantities they stand for were "
+                "not checked and the absence of findings for them is not evidence of "
+                "correctness."
+            ),
+            affected_input=str(nav2_params_path),
+            unanalyzed_constructs=list(nav2_invalid_values),
+            suggested_fix="Replace each with a finite number, or remove the field.",
         ))
 
     if nav2_params_path is not None and nav2_unchecked_roles:
