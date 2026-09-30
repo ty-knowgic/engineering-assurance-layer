@@ -346,3 +346,97 @@ def test_registry_and_role_enum_stay_in_sync():
     """Every supported plugin must map every role, or comparisons silently skip."""
     for plugin, mapping in CONTROLLER_LIMIT_PARAMS.items():
         assert set(mapping) == set(LimitRole), f"{plugin} is missing roles"
+
+
+# ── Regression: external review of EAL@9701f18 (2026-09-10) ───────────────────
+# Two reproduced defects. Fixtures are synthetic on purpose: the point is list
+# order and a YAML `.nan`, which no upstream file exercises.
+
+_DWB_BLOCK = """    {name}:
+      plugin: dwb_core::DWBLocalPlanner
+      max_vel_x: {vx}
+      min_vel_x: 0.0
+      max_vel_theta: {wz}
+      acc_lim_x: {ax}
+      decel_lim_x: -1.0
+      acc_lim_theta: 1.0
+"""
+_SMOOTHER = """velocity_smoother:
+  ros__parameters:
+    max_velocity: [0.5, 0.0, 1.0]
+    min_velocity: [0.0, 0.0, -1.0]
+    max_accel: [1.0, 0.0, 1.0]
+    max_decel: [-1.0, 0.0, -1.0]
+"""
+
+
+def _write_two_dwb(tmp_path: Path, order: list[str], slow_ax: str = "1.0") -> Path:
+    blocks = {
+        "Slow": _DWB_BLOCK.format(name="Slow", vx=0.5, wz=1.0, ax=slow_ax),
+        "Fast": _DWB_BLOCK.format(name="Fast", vx=2.0, wz=4.0, ax=3.0),
+    }
+    text = (
+        "controller_server:\n  ros__parameters:\n    controller_frequency: 20.0\n"
+        f"    controller_plugins: [{', '.join(order)}]\n"
+        + "".join(blocks[n] for n in order)
+        + _SMOOTHER
+    )
+    path = tmp_path / "params.yaml"
+    path.write_text(text, encoding="utf-8")
+    return path
+
+
+def _ir_with(slice_):
+    from eal.ingestion.nav2_params import merge_nav2_slice_into_ir
+    from eal.ir.schema import IRSnapshot
+
+    ir = IRSnapshot(spec_file="spec.md")
+    merge_nav2_slice_into_ir(ir, slice_)
+    return ir
+
+
+@pytest.mark.parametrize("order", [["Slow", "Fast"], ["Fast", "Slow"]])
+def test_additional_controller_plugin_is_reported_not_dropped(tmp_path, order):
+    slice_ = parse_nav2_params(_write_two_dwb(tmp_path, order))
+    assert slice_.controller_plugin_key == order[0]
+    skipped = [c for c in slice_.unsupported_constructs if "additional controller plugin" in c]
+    assert len(skipped) == 1 and order[1] in skipped[0]
+
+
+def test_controller_order_cannot_hide_a_clean_looking_result(tmp_path):
+    """Same plugins, different order: the findings may differ, but never silently."""
+    from eal.coverage import CoverageGapCategory, detect_coverage_gaps
+    from eal.rules.nav2_coherence import check_nav2_coherence
+
+    for order in (["Slow", "Fast"], ["Fast", "Slow"]):
+        path = _write_two_dwb(tmp_path, order)
+        slice_ = parse_nav2_params(path)
+        gaps = detect_coverage_gaps(
+            _ir_with(slice_),
+            nav2_params_path=path,
+            nav2_unsupported=slice_.unsupported_constructs,
+        )
+        assert any(g.category is CoverageGapCategory.UNSUPPORTED_INPUT_CONSTRUCT for g in gaps), order
+        assert check_nav2_coherence(slice_) is not None
+
+
+def test_non_finite_limit_is_rejected_not_classified(tmp_path):
+    from eal.coverage import CoverageGapCategory, detect_coverage_gaps
+    from eal.rules.nav2_coherence import check_nav2_coherence
+
+    path = _write_two_dwb(tmp_path, ["Slow"], slow_ax=".nan")
+    slice_ = parse_nav2_params(path)
+    assert LimitRole.A_ACCEL_LINEAR not in slice_.by_stage(Nav2Stage.CONTROLLER)
+    assert slice_.invalid_values == ["controller_server.ros__parameters.Slow.acc_lim_x"]
+    assert all(f.category.value != "NAV2_LIMIT_HEADROOM" for f in check_nav2_coherence(slice_))
+    gaps = detect_coverage_gaps(
+        _ir_with(slice_), nav2_params_path=path, nav2_invalid_values=slice_.invalid_values
+    )
+    assert any(g.category is CoverageGapCategory.INVALID_INPUT_VALUE for g in gaps)
+
+
+def test_infinite_smoother_limit_is_rejected(tmp_path):
+    path = _write_two_dwb(tmp_path, ["Slow"])
+    path.write_text(path.read_text().replace("max_accel: [1.0,", "max_accel: [.inf,"), encoding="utf-8")
+    slice_ = parse_nav2_params(path)
+    assert slice_.invalid_values == ["velocity_smoother.ros__parameters.max_accel[0]"]

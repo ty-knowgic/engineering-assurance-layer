@@ -28,6 +28,7 @@ mapping for a plugin nobody has validated would produce confident nonsense.
 
 from __future__ import annotations
 
+import math
 from enum import Enum
 from pathlib import Path
 from typing import Any, Optional  # noqa: F401  (Any used in loader return type)
@@ -189,6 +190,9 @@ class Nav2ParamSlice(BaseModel):
     duplicate_keys: list[str] = Field(default_factory=list)
     # Roles declared on exactly one side, so coherence cannot be judged for them.
     unchecked_roles: list[str] = Field(default_factory=list)
+    # YAML paths holding NaN/inf. These are not numbers a limit can be checked
+    # against, so they are withheld from `values` and reported instead.
+    invalid_values: list[str] = Field(default_factory=list)
 
     def by_stage(self, stage: Nav2Stage) -> dict[LimitRole, Nav2Value]:
         return {v.role: v for v in self.values if v.stage is stage and v.role is not None}
@@ -220,12 +224,18 @@ def _nested_costmap_params(doc: dict, node: str) -> dict:
 
 
 def _as_number(value: Any) -> Optional[float]:
-    """Accept ints/floats only. Bools are ints in Python and must be rejected."""
+    """Accept finite ints/floats only. Bools are ints in Python and must be rejected."""
     if isinstance(value, bool):
         return None
     if isinstance(value, (int, float)):
-        return float(value)
+        number = float(value)
+        return number if math.isfinite(number) else None
     return None
+
+
+def _is_nonfinite(value: Any) -> bool:
+    """True for a YAML `.nan` / `.inf` scalar, which `_as_number` withholds."""
+    return isinstance(value, float) and not math.isfinite(value)
 
 
 def _collect_scalars(
@@ -235,11 +245,15 @@ def _collect_scalars(
     stage: Nav2Stage,
     prefix: str,
     yaml_prefix: str,
+    invalid: list[str],
 ) -> list[Nav2Value]:
     out: list[Nav2Value] = []
     for param_name, unit in wanted.items():
-        number = _as_number(params.get(param_name))
+        raw = params.get(param_name)
+        number = _as_number(raw)
         if number is None:
+            if _is_nonfinite(raw):
+                invalid.append(f"{yaml_prefix}.{param_name}")
             continue
         out.append(Nav2Value(
             name=f"{prefix}_{param_name}",
@@ -259,6 +273,7 @@ def parse_nav2_params(path: Path) -> Nav2ParamSlice:
     values: list[Nav2Value] = []
     unsupported: list[str] = []
     absent: list[str] = []
+    invalid: list[str] = []
 
     # ── controller_server ─────────────────────────────────────────────────────
     controller = _params_of(doc, "controller_server")
@@ -271,16 +286,29 @@ def parse_nav2_params(path: Path) -> Nav2ParamSlice:
         values += _collect_scalars(
             controller, _CONTROLLER_SCALARS,
             stage=Nav2Stage.CONTROLLER, prefix="controller", yaml_prefix=base,
+            invalid=invalid,
         )
         # The plugin's config key is itself configurable; read it rather than
         # assuming the conventional "FollowPath".
         plugin_keys = controller.get("controller_plugins")
         candidates = [k for k in plugin_keys if isinstance(k, str)] if isinstance(plugin_keys, list) else []
+        declared: list[tuple[str, str]] = []
         for key in candidates:
             block = controller.get(key)
             if isinstance(block, dict) and isinstance(block.get("plugin"), str):
-                plugin_key, plugin = key, block["plugin"]
-                break
+                declared.append((key, block["plugin"]))
+        if declared:
+            plugin_key, plugin = declared[0]
+        # Nav2 can load several controller plugins and pick one per goal via the
+        # FollowPath `controller_id`. Only the first is modelled, and which one a
+        # goal uses is not knowable from this file. Naming the rest keeps them
+        # from being dropped silently: a config whose other plugin exceeds the
+        # smoother would otherwise read as clean when only the list order changed.
+        for other_key, other_plugin in declared[1:]:
+            unsupported.append(
+                f"additional controller plugin {other_key} ({other_plugin}); "
+                f"only {plugin_key} was evaluated"
+            )
 
         if plugin is None:
             absent.append("controller_server.controller_plugins[].plugin")
@@ -292,6 +320,8 @@ def parse_nav2_params(path: Path) -> Nav2ParamSlice:
             for role, param_name in CONTROLLER_LIMIT_PARAMS[plugin].items():
                 number = _as_number(block.get(param_name))
                 if number is None:
+                    if _is_nonfinite(block.get(param_name)):
+                        invalid.append(f"{pbase}.{param_name}")
                     continue
                 values.append(Nav2Value(
                     name=f"controller_{role.value}",
@@ -306,6 +336,7 @@ def parse_nav2_params(path: Path) -> Nav2ParamSlice:
             values += _collect_scalars(
                 block, _PLUGIN_SCALARS,
                 stage=Nav2Stage.CONTROLLER, prefix="controller", yaml_prefix=pbase,
+                invalid=invalid,
             )
 
     # ── velocity_smoother ─────────────────────────────────────────────────────
@@ -320,6 +351,8 @@ def parse_nav2_params(path: Path) -> Nav2ParamSlice:
                 continue
             number = _as_number(vector[index])
             if number is None:
+                if _is_nonfinite(vector[index]):
+                    invalid.append(f"{base}.{param_name}[{index}]")
                 continue
             values.append(Nav2Value(
                 name=f"smoother_{role.value}",
@@ -340,6 +373,7 @@ def parse_nav2_params(path: Path) -> Nav2ParamSlice:
         values += _collect_scalars(
             costmap, _COSTMAP_SCALARS,
             stage=Nav2Stage.LOCAL_COSTMAP, prefix="local_costmap", yaml_prefix=base,
+            invalid=invalid,
         )
         layer_names = costmap.get("plugins")
         layers = [n for n in layer_names if isinstance(n, str)] if isinstance(layer_names, list) else []
@@ -351,6 +385,7 @@ def parse_nav2_params(path: Path) -> Nav2ParamSlice:
             values += _collect_scalars(
                 layer, _INFLATION_SCALARS,
                 stage=Nav2Stage.LOCAL_COSTMAP, prefix="local_costmap", yaml_prefix=lbase,
+                invalid=invalid,
             )
             # Observation sources carry the sensor marking range, which upper-bounds
             # the distance at which an obstacle can enter the costmap at all.
@@ -370,6 +405,7 @@ def parse_nav2_params(path: Path) -> Nav2ParamSlice:
                     stage=Nav2Stage.LOCAL_COSTMAP,
                     prefix=f"local_costmap_{source}",
                     yaml_prefix=f"{lbase}.{source}",
+                    invalid=invalid,
                 )
 
     slice_ = Nav2ParamSlice(
@@ -380,6 +416,7 @@ def parse_nav2_params(path: Path) -> Nav2ParamSlice:
         unsupported_constructs=unsupported,
         absent_sections=absent,
         duplicate_keys=duplicate_keys,
+        invalid_values=invalid,
     )
 
     # A role present on only one side cannot be compared. Staying silent there
