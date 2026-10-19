@@ -144,7 +144,12 @@ def judge(mutation: dict, baseline: dict, actual: dict) -> dict:
         detail = ("inputs not fully read" if incomplete else "reported inputs fully read")
     elif outcome == "MISS":
         verdict = "SILENT_AS_EXPECTED" if not said_something else "DETECTED_UNEXPECTEDLY"
-        detail = "nothing fired" if not said_something else f"fired: {new_categories}"
+        said = []
+        if new_categories:
+            said.append(f"fired: {new_categories}")
+        if incomplete:
+            said.append("inputs not fully read")
+        detail = "; ".join(said) or "nothing fired"
     elif outcome == "NO_NEW_FINDINGS":
         verdict = "CLEAN" if not said_something else "FALSE_POSITIVE"
         detail = "no new findings" if not said_something else f"spurious: {new_signatures}"
@@ -329,6 +334,10 @@ def write_report(catalogue: dict, baselines: dict, results: list[dict]) -> None:
         "",
         " ".join(catalogue["first_run"].split()),
         "",
+        *(
+            [" ".join(catalogue["second_round"].split()), ""]
+            if "second_round" in catalogue else []
+        ),
         "## Results",
         "",
         "| ID | Category | Hazard | Expected | Verdict | EAL output |",

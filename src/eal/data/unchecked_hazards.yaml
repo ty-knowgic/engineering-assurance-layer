@@ -9,20 +9,10 @@ statement: Hazard classes EAL does not check. A review that reports no findings 
   about any of these. Measured by the adversarial evaluation in eval/, not asserted.
 measured:
   hazardous_mutations: 19
-  detected: 8
-  undetected: 11
+  detected: 9
+  undetected: 10
   source: eval/output/results.json
 classes:
-- id: conflicting_definitions
-  title: Contradictory definitions in unexamined locations
-  detail: 'Duplicate keys in one mapping are detected. A second controller plugin block with
-    contradictory limits is not: the importer resolves the first plugin entry and never inspects
-    alternatives.'
-  worst_hazard: moderate
-  evidence:
-  - mutation: M16
-    hazard: moderate
-    case: Second controller plugin block with contradictory limits
 - id: false_safety_assumption
   title: Physically implausible declared capability
   detail: EAL checks that declarations agree with each other, never that any of them is achievable.
