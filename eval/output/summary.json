@@ -1,13 +1,15 @@
 {
   "mutations": 23,
   "hazardous_mutations": 19,
-  "hazards_detected": 8,
-  "detection_rate_over_hazards": 0.421,
-  "silent_on_real_hazard": 11,
+  "hazards_detected": 9,
+  "detection_rate_over_hazards": 0.474,
+  "silent_on_real_hazard": 10,
   "false_positives": 0,
   "expected_detections_missed": 0,
-  "prior_accuracy": 1.0,
-  "wrong_priors": [],
+  "prior_accuracy": 0.957,
+  "wrong_priors": [
+    "M16"
+  ],
   "reproducible": true,
   "actionability_of_emitted_findings": 1.0
 }

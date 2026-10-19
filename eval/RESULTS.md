@@ -7,13 +7,13 @@ the outcome.
 
 ## Headline
 
-**EAL said something about 8 of 19 mutations that introduce a real hazard (42%).**
+**EAL said something about 9 of 19 mutations that introduce a real hazard (47%).**
 
-- Silent on a real hazard: **11**
+- Silent on a real hazard: **10**
 - False positives on harmless edits: **0**
 - Expected detections that did not fire: **0**
 - Re-run agreement: **100%**
-- Author's prior correct: 100%
+- Author's prior correct: 96% (wrong on M16)
 
 Detection rate is computed over every hazardous mutation, including those
 the catalogue predicted would be missed. A documented blind spot is still a
@@ -22,6 +22,8 @@ blind spot; excusing it would turn this report into an advertisement.
 ## History of this catalogue
 
 The first run reported 6 of 19 hazards detected, with two wrong priors, and it turned up three defects — two in the tool and one in this harness. In the tool: M13 (a motion limit deleted from one side of the comparison) and M15 (the same key declared twice with different values) both stayed silent where the catalogue expected UNKNOWN. Neither was a capability gap; both violated the existing rule that EAL must not report a clean result for input it did not analyze, and both were fixed by adding the INCOMPLETE_COMPARISON and AMBIGUOUS_INPUT coverage gaps. In the harness: detection was measured by diffing finding *categories* against the baseline, which cannot see a mutation that worsens an existing finding. M09 weakens braking sevenfold and was scored as silent because the category was already present in the baseline. Diffing now uses category plus title. That bug made the tool look worse than it is, but it was still a broken instrument, and an evaluation is only as trustworthy as what it measures with. The catalogue's expectations were never edited. Detection over hazards ended at 8 of 19; restoring the UNKNOWN contract did not widen the analysis envelope, and the eleven remaining silent hazards are untouched by it.
+
+A review of 9701f18 reproduced two defects in the Nav2 importer (e4cdca0). With several controller plugins only the first was read and the rest were dropped without comment, so reordering the same plugins changed the result. And a `.nan` limit was accepted and classified as NAV2_LIMIT_HEADROOM. The first is M16, which the catalogue had filed as an expected miss and a capability gap. It was not one. It is the same defect as M13 and M15, a clean result for input that was not analyzed, which the UNKNOWN contract already forbade. M16 now reports that inputs were not fully read. Its expectation was not edited, so the prior is recorded as wrong. Prior accuracy went from 100% to 96%, detection over hazards from 8 of 19 to 9 of 19, and silent hazards from 11 to 10. The non-finite case has no catalogue entry. It is covered by unit tests instead, because an expectation written after the fix would not be a prior.
 
 ## Results
 
@@ -42,7 +44,7 @@ The first run reported 6 of 19 hazards detected, with two wrong priors, and it t
 | M13 | missing_parameter | moderate | UNKNOWN | DETECTED | UNKNOWN |
 | M14 | missing_parameter | moderate | MISS | SILENT_AS_EXPECTED | _silent_ |
 | M15 | conflicting_definitions | severe | UNKNOWN | DETECTED | `NAV2_HORIZON_EXCEEDS_COSTMAP`, `NAV2_VELOCITY_OVERDECLARED` |
-| M16 | conflicting_definitions | moderate | MISS | SILENT_AS_EXPECTED | _silent_ |
+| M16 | conflicting_definitions | moderate | MISS | DETECTED_UNEXPECTEDLY | UNKNOWN |
 | M17 | irrelevant_change | none | NO_NEW_FINDINGS | CLEAN | _silent_ |
 | M18 | irrelevant_change | none | NO_NEW_FINDINGS | CLEAN | _silent_ |
 | M19 | irrelevant_change | none | NO_NEW_FINDINGS | CLEAN | _silent_ |
@@ -103,12 +105,6 @@ A consistent unit error is arithmetically coherent. EAL has no notion of a plaus
 
 Documented as inapplicable rather than unknown: a stack legitimately may not run the smoother. Listed so the decision stays visible and arguable.
 
-### M16 — Second controller plugin block with contradictory limits
-
-**Hazard:** moderate
-
-The importer takes the first plugin entry that resolves and never looks at the second, so a contradictory alternative controller is unexamined.
-
 ### M22 — Smoother claims 100 m/s^2 braking capability
 
 **Hazard:** severe
@@ -121,6 +117,13 @@ Roughly 10 g of braking, physically absurd for a wheeled robot. Because the cont
 
 The model asserts no actuation delay while the loop runs at 500 ms. EAL extracts both numbers and never relates them.
 
+
+## Where the author's expectation was wrong
+
+Recorded rather than corrected; a wrong prior about one's own tool is
+itself a finding.
+
+- **M16** (Second controller plugin block with contradictory limits): expected `MISS`, got `DETECTED_UNEXPECTEDLY` — inputs not fully read
 
 ## Measurement notes
 

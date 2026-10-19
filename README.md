@@ -131,8 +131,8 @@ outcome recorded in [`eval/mutations.yaml`](eval/mutations.yaml) **before** the
 harness ran. Expectations are never edited to match results. Full report:
 [`eval/RESULTS.md`](eval/RESULTS.md).
 
-**EAL says something about 8 of the 19 mutations that introduce a real hazard
-(42%). It is silent on the other 11.** Zero false positives on harmless edits.
+**EAL says something about 9 of the 19 mutations that introduce a real hazard
+(47%). It is silent on the other 10.** Zero false positives on harmless edits.
 
 The detection rate is computed over every hazardous mutation, including ones the
 catalogue predicted would be missed. A documented blind spot is still a blind
@@ -629,8 +629,9 @@ comparison and let unanalyzable input masquerade as a graded result.
 
 | Category | Fires when |
 |----------|-----------|
-| `UNSUPPORTED_INPUT_CONSTRUCT` | An importer named constructs it does not model (BehaviorTree nodes outside the supported subset; a Nav2 controller plugin with no validated mapping) |
+| `UNSUPPORTED_INPUT_CONSTRUCT` | An importer named constructs it does not model (BehaviorTree nodes outside the supported subset; a Nav2 controller plugin with no validated mapping; a second controller plugin in the same file, of which only the first is evaluated) |
 | `AMBIGUOUS_INPUT` | The same key is declared twice with different values. YAML keeps the last, so the file may read differently to a human than to the parser |
+| `INVALID_INPUT_VALUE` | A limit field held NaN or infinity. The value is withheld rather than compared, so the quantity it stands for is reported as unchecked |
 | `INCOMPLETE_COMPARISON` | A cross-artifact check ran but one side of some quantity is absent, so those quantities were not compared |
 | `INPUT_YIELDED_NO_CONTENT` | An input file was explicitly supplied but contributed nothing to the IR |
 | `NO_ANALYZABLE_CONTENT` | The merged IR has no signals, constraints, or transitions, so no check could have fired |
