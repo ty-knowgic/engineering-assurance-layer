@@ -23,9 +23,9 @@ base_files:
   mppi: tests/fixtures/nav2_upstream_params/nav2_params.yaml
   dwb: tests/fixtures/nav2_upstream_params/nav2_system_params.yaml
 
-# Recorded because the current numbers no longer show it. Prior accuracy reads
-# 100% today only because the code was changed to meet the expectations; the
-# expectations themselves were never edited.
+# Recorded because the current numbers no longer show it. After this round prior
+# accuracy read 100% only because the code was changed to meet the expectations;
+# the expectations themselves were never edited. A later round is `second_round`.
 first_run: >
   The first run reported 6 of 19 hazards detected, with two wrong priors, and it
   turned up three defects — two in the tool and one in this harness. In the tool:
@@ -43,6 +43,23 @@ first_run: >
   it measures with. The catalogue's expectations were never edited. Detection over
   hazards ended at 8 of 19; restoring the UNKNOWN contract did not widen the
   analysis envelope, and the eleven remaining silent hazards are untouched by it.
+
+# A wrong prior found after the catalogue was frozen. The expectation for M16 is
+# deliberately left as written; the harness reports it as wrong.
+second_round: >
+  A review of 9701f18 reproduced two defects in the Nav2 importer (e4cdca0).
+  With several controller plugins only the first was read and the rest were
+  dropped without comment, so reordering the same plugins changed the result.
+  And a `.nan` limit was accepted and classified as NAV2_LIMIT_HEADROOM. The
+  first is M16, which the catalogue had filed as an expected miss and a
+  capability gap. It was not one. It is the same defect as M13 and M15, a clean
+  result for input that was not analyzed, which the UNKNOWN contract already
+  forbade. M16 now reports that inputs were not fully read. Its expectation was
+  not edited, so the prior is recorded as wrong. Prior accuracy went from 100%
+  to 96%, detection over hazards from 8 of 19 to 9 of 19, and silent hazards
+  from 11 to 10. The non-finite case has no catalogue entry. It is covered by
+  unit tests instead, because an expectation written after the fix would not be
+  a prior.
 
 # Human-readable statement of what EAL cannot see, per mutation category.
 #
@@ -101,9 +118,10 @@ hazard_classes:
   conflicting_definitions:
     title: "Contradictory definitions in unexamined locations"
     detail: >
-      Duplicate keys in one mapping are detected. A second controller plugin
-      block with contradictory limits is not: the importer resolves the first
-      plugin entry and never inspects alternatives.
+      Duplicate keys in one mapping, and controller plugin blocks beyond the
+      first, are reported as an incomplete analysis rather than ignored. A
+      contradiction in any other location the importer does not read would still
+      be invisible.
 
   false_safety_assumption:
     title: "Physically implausible declared capability"

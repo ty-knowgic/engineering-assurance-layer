@@ -73,10 +73,8 @@ The merged IR contains no signals, constraints, or transitions. No deterministic
 
 **Hazard classes EAL does not check. A review that reports no findings says nothing about any of these. Measured by the adversarial evaluation in eval/, not asserted.**
 
-Measured by adversarial evaluation: EAL detected 8 of 19 mutations that introduce a real hazard. 11 went undetected, in these classes:
+Measured by adversarial evaluation: EAL detected 9 of 19 mutations that introduce a real hazard. 10 went undetected, in these classes:
 
-- **Contradictory definitions in unexamined locations** (`conflicting_definitions`, worst observed hazard: moderate)  
-  Duplicate keys in one mapping are detected. A second controller plugin block with contradictory limits is not: the importer resolves the first plugin entry and never inspects alternatives.
 - **Physically implausible declared capability** (`false_safety_assumption`, worst observed hazard: severe)  
   EAL checks that declarations agree with each other, never that any of them is achievable. A platform declaring roughly ten g of braking, or zero actuation delay alongside a half-second control loop, is accepted without comment.
 - **Slower control or perception loop** (`latency_increase`, worst observed hazard: severe)  

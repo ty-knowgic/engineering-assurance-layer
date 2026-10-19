@@ -131,8 +131,8 @@ outcome recorded in [`eval/mutations.yaml`](eval/mutations.yaml) **before** the
 harness ran. Expectations are never edited to match results. Full report:
 [`eval/RESULTS.md`](eval/RESULTS.md).
 
-**EAL says something about 8 of the 19 mutations that introduce a real hazard
-(42%). It is silent on the other 11.** Zero false positives on harmless edits.
+**EAL says something about 9 of the 19 mutations that introduce a real hazard
+(47%). It is silent on the other 10.** Zero false positives on harmless edits.
 
 The detection rate is computed over every hazardous mutation, including ones the
 catalogue predicted would be missed. A documented blind spot is still a blind
