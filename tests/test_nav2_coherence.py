@@ -307,3 +307,28 @@ def test_check_is_deterministic(filename):
     first = [(f.category.value, f.title) for f in _check(filename)]
     second = [(f.category.value, f.title) for f in _check(filename)]
     assert first == second
+
+
+def test_limit_findings_state_what_the_file_cannot_establish():
+    """
+    The comparison assumes the selected controller and the default chain, and a
+    smoother limit is a declaration rather than a measurement (DCR-005). Every
+    finding from it must say so instead of asserting what reaches the base.
+    """
+    seen = 0
+    for name in ("nav2_params.yaml", "nav2_no_map_params.yaml"):
+        for f in _check(name):
+            if f.category.value in (ACCEL, VELOCITY):
+                seen += 1
+                assert "controller_id" in f.details
+                assert "default bringup chain" in f.details
+                assert "not evidence of what it can physically do" in f.details
+                assert "actually receives" not in f.summary
+    assert seen > 0
+
+
+def test_raising_the_smoother_is_flagged_as_a_hardware_claim():
+    """The two reconciliations are not equivalent (DCR-004, open point)."""
+    for f in _check("nav2_params.yaml"):
+        if f.category.value == ACCEL:
+            assert "needs measured evidence" in f.suggested_fix

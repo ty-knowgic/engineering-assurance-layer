@@ -4,7 +4,8 @@ Nav2 parameter YAML ingestion.
 This is the first EAL importer that reads a *real, unmodified upstream artifact*
 rather than a hand-authored abstraction. It extracts the motion limits that a
 Nav2 stack declares in two independent places — the controller plugin, and the
-downstream `velocity_smoother` that actually clamps what reaches the base — plus
+downstream `velocity_smoother` that, in the default bringup chain, clamps what
+reaches the base — plus
 the costmap and frequency values those limits have to be consistent with.
 
 Scope discipline: this module **extracts and records provenance only**. It makes

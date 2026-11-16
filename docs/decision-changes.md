@@ -158,3 +158,55 @@ issue thread has produced.
 
 Recorded as open. It is also exactly the question the secondary part of #6357
 asked and the kind of thing this tool exists to make visible.
+
+---
+
+## DCR-005 — The limit comparison holds only under assumptions the file cannot show
+
+**Date.** 2026-11-16
+
+**Previous decision.** The README, the module docstrings and every
+over-declaration finding stated without condition that "the smoother is what the
+base actually receives".
+
+**Basis at the time.** The topic remappings in
+`nav2_bringup/launch/navigation_launch.py` at `075b2961`, which do place
+`velocity_smoother` between `controller_server` and the base.
+
+**New evidence.** An external review of `9701f18` (received 2026-09-10) argued
+that the claim about what reaches the base should be conditional on the selected
+controller and the actual downstream topology, and that a smoother declaration
+is not evidence of measured physical capability. Both points stand on inspection:
+
+- FollowPath selects a controller per goal by `controller_id`. That choice is not
+  in the params file, so which plugin's limits apply to a given motion cannot be
+  read from it.
+- The remappings are the default bringup's. A deployment can remap, omit the
+  smoother or insert nodes, and EAL does not read the running graph.
+- The smoother limit is configuration. Nothing in the file says the hardware was
+  measured to meet it.
+
+The same review reproduced two importer defects (only the first of several
+controller plugins was read; a `.nan` limit was accepted). Those were fixed in
+`e4cdca0`.
+
+**What was invalid.** The unconditional wording. The comparison itself, its
+direction rules and its severities are unchanged.
+
+**New decision.** The topology claim is stated as holding in the default bringup
+chain. Every finding from the limit comparison now carries `_SCOPE_CAVEAT` in
+`src/eal/rules/nav2_coherence.py`, naming both assumptions and the
+declaration/measurement distinction. The suggested fix for an over-declaration
+now says that raising the smoother asserts hardware capability and needs
+measured evidence, which is the open point recorded under DCR-004.
+
+Also corrected here: the README still carried the trajectory-validation argument
+that DCR-004 withdrew. It is replaced by the role-semantics justification.
+
+**Affected.** `src/eal/rules/nav2_coherence.py`,
+`src/eal/ingestion/nav2_params.py` docstring, README "Nav2 Coherence Checks",
+`tests/test_nav2_coherence.py`, the demo outputs that embed finding text.
+
+**To withdraw.** Restore the unconditional wording only if EAL gains a source
+for the selected controller and the deployed graph, and then only for the runs
+that use it.

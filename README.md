@@ -720,9 +720,25 @@ controller_server -> cmd_vel_nav -> velocity_smoother
     -> cmd_vel_smoothed -> collision_monitor -> cmd_vel -> base
 ```
 
-so the smoother's limits are what the base actually receives and the
+so in that topology the smoother's limits bound what reaches the base and the
 controller's are a request. A text diff of `vx_max: 0.5 -> 2.0` cannot tell you
 whether the two still agree. This check compares them by magnitude, per role.
+
+**What the comparison assumes and cannot check.** Every finding from this check
+says so in its text ([DCR-005](docs/decision-changes.md)):
+
+- *The plugin compared is the one a goal selects.* FollowPath picks a controller
+  per goal by `controller_id`, which the params file does not record. When a file
+  declares more than one controller plugin, only the first is compared and the
+  others are reported as not evaluated, so the run is UNKNOWN rather than clean.
+- *The deployed graph follows the default chain above.* A stack that remaps
+  `cmd_vel_nav`, drops the smoother, or adds another node in between is not the
+  topology this check reasons about. EAL reads the params file, not the running
+  graph.
+- *A smoother limit is a declaration, not a measurement.* It states what the
+  platform is configured to enforce. It is not evidence of what the hardware can
+  physically do, so a finding never shows that the base can brake at either
+  figure.
 
 **Direction determines the finding, and the three cases are not equivalent:**
 
@@ -732,11 +748,13 @@ whether the two still agree. This check compares them by magnitude, per role.
 | Controller > smoother, on **velocity** | `NAV2_VELOCITY_OVERDECLARED` | MEDIUM |
 | Controller < smoother, either quantity | `NAV2_LIMIT_HEADROOM` | LOW, `strict` only |
 
-Acceleration is separated out because the controller rolls out and validates
-candidate trajectories against its own figure. If the chain delivers less
-braking than assumed, a trajectory accepted as collision-free may not be
-achievable — that leans unsafe. Over-declared *velocity* only means the robot
-executes more slowly than planned: a model-fidelity problem, not an unsafe one.
+Acceleration is separated out because of what the two declarations are for.
+The smoother expresses the platform's hard limit and the controller a
+behavioural desire that may sit below it (see the maintainer quote below), so a
+controller declaring *more* acceleration than the hard limit plans with
+capability the platform is not configured to deliver — that leans unsafe.
+Over-declared *velocity* only means the robot executes more slowly than planned:
+a model-fidelity problem, not an unsafe one.
 
 The informational third case is `strict`-only because it was measured to be
 noise: on the real corpus it fired twice, once for 5% of unused angular envelope

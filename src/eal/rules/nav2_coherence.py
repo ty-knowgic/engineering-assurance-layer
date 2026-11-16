@@ -11,9 +11,16 @@ real upstream Nav2 parameter file:
         controller_server -> cmd_vel_nav -> velocity_smoother
             -> cmd_vel_smoothed -> collision_monitor -> cmd_vel -> base
 
-    so the smoother's limits are what the base actually receives, and the
-    controller's are a request. A text diff of `vx_max: 0.5 -> 2.0` cannot tell
-    you whether the two still agree; this check can.
+    so in that topology the smoother's limits bound what reaches the base, and
+    the controller's are a request. A text diff of `vx_max: 0.5 -> 2.0` cannot
+    tell you whether the two still agree; this check can.
+
+    Two things the file cannot establish, and the finding says so (DCR-005):
+    which controller plugin a goal actually selects (FollowPath picks one per
+    goal by `controller_id`), and whether the deployed graph follows the default
+    chain above. A smoother limit is also a declaration, not a measurement: it
+    says what the platform is configured to enforce, not what it can physically
+    do.
 
 (B) Prediction horizon vs costmap size. This one is not our model — it is
     written down by the Nav2 maintainers in nav2_mppi_controller/README.md:
@@ -131,6 +138,17 @@ _INTENT_CAVEAT = (
 )
 
 
+# What the comparison assumes and the file cannot show. See DCR-005.
+_SCOPE_CAVEAT = (
+    "This comparison holds only under two assumptions the parameter file cannot "
+    "establish: that the plugin evaluated here is the controller the goal selects "
+    "(FollowPath chooses one per goal by controller_id), and that the deployed graph "
+    "follows the default bringup chain, with velocity_smoother between the "
+    "controller and the base. The smoother figure is a declaration of what the "
+    "platform is configured to enforce, not evidence of what it can physically do."
+)
+
+
 def _ref(value: Nav2Value, path: str) -> str:
     return f"{path}:{value.yaml_path}"
 
@@ -181,12 +199,15 @@ def _limit_coherence(slice_: Nav2ParamSlice) -> list[Finding]:
                 ),
                 summary=(
                     f"{common} The controller's figure exceeds the smoother's by "
-                    f"{ratio:.2f}x, and the smoother is what the base actually receives."
+                    f"{ratio:.2f}x. In the default bringup chain the smoother bounds what "
+                    f"reaches the base."
                 ),
                 details=(
                     (_ACCEL_RATIONALE if is_accel else _VELOCITY_RATIONALE)
                     + " "
                     + _INTENT_CAVEAT
+                    + " "
+                    + _SCOPE_CAVEAT
                 ),
                 related_ir_nodes=[
                     f"NAV2-CONTROLLER_{role.value.upper()}",
@@ -198,7 +219,9 @@ def _limit_coherence(slice_: Nav2ParamSlice) -> list[Finding]:
                     f"Reconcile the two declarations: either raise "
                     f"`velocity_smoother.{s.param_name}` to {c.value}, or lower "
                     f"`{c.param_name}` to {s.value}, whichever matches the platform's "
-                    f"real capability."
+                    f"real capability. Lowering the controller asserts nothing new; "
+                    f"raising the smoother asserts that the hardware can deliver "
+                    f"{c.value} {c.unit} and needs measured evidence."
                 ),
             ))
         else:
@@ -215,7 +238,7 @@ def _limit_coherence(slice_: Nav2ParamSlice) -> list[Finding]:
                 ),
                 details=(
                     "This direction is not unsafe-leaning and is frequently "
-                    "deliberate. Reported for visibility only."
+                    "deliberate. Reported for visibility only. " + _SCOPE_CAVEAT
                 ),
                 related_ir_nodes=[
                     f"NAV2-CONTROLLER_{role.value.upper()}",
